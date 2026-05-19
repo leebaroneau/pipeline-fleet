@@ -47,6 +47,7 @@ Inventoried 2026-05-19 from GitHub repo enumeration across the 4 orgs + personal
 | agent-kwa | kwa-nguyen | |
 | THP-Strength | leebaroneau | |
 | Hobbyzenlife.com.au-HydrogenTS | leebaroneau | |
+| template-agent | leebaroneau | Source-of-truth template for `agent-haverford`, `agent-genvest`, `agent-kwa` deployments. Renamed 2026-05-19 from `paperclip-hermes-gbrain` to follow the role+scope naming convention. |
 | pipeline-core | leebaroneau | Self-host (already CI'd; pipeline install is optional dogfood) |
 
 ### Tier 2 — Shopify theme repos (~28)
