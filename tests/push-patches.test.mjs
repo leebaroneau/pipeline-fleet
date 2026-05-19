@@ -165,3 +165,34 @@ test("planRefresh: non-pipeline YAMLs in workflows/ are ignored", () => {
   assert.deepEqual(r.removed,   []);
   assert.deepEqual(r.updated,   []);
 });
+
+import { applyRefresh } from "../scripts/push-patches.mjs";
+import { readFileSync, existsSync } from "node:fs";
+
+test("applyRefresh: writes added files and overwrites updated ones; leaves unchanged alone", () => {
+  const tpl = fakeTemplatesDir({
+    "pipeline-branch-name.yml": "name: branch-name v2\n",
+    "pipeline-doctor.yml":      "name: doctor v1\n",
+  });
+  const repo = fakeConsumer({
+    "pipeline-branch-name.yml": "name: branch-name v1\n", // updated case
+    // pipeline-doctor.yml missing — added case
+  });
+  const plan = planRefresh({ repoDir: repo, callerTemplatesDir: tpl });
+  const written = applyRefresh({ plan, callerTemplatesDir: tpl, repoDir: repo });
+  assert.equal(written.length, 2, "added + updated written");
+  assert.equal(
+    readFileSync(join(repo, ".github/workflows/pipeline-branch-name.yml"), "utf8"),
+    "name: branch-name v2\n",
+  );
+  assert.ok(existsSync(join(repo, ".github/workflows/pipeline-doctor.yml")));
+});
+
+test("applyRefresh: no-op when plan is all-unchanged", () => {
+  const body = "name: caller\n";
+  const tpl  = fakeTemplatesDir({ "pipeline-branch-name.yml": body });
+  const repo = fakeConsumer({ "pipeline-branch-name.yml": body });
+  const plan = planRefresh({ repoDir: repo, callerTemplatesDir: tpl });
+  const written = applyRefresh({ plan, callerTemplatesDir: tpl, repoDir: repo });
+  assert.deepEqual(written, []);
+});

@@ -10,8 +10,8 @@
 // workflow — it walks 5 orgs × N consumers and rate-limit hygiene + auth
 // scope warrant a human-in-the-loop trigger.
 
-import { readFileSync, existsSync, readFileSync as readF, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync, existsSync, readFileSync as readF, readdirSync, writeFileSync, mkdirSync, copyFileSync } from "node:fs";
+import { join, dirname } from "node:path";
 
 const ACTIVE_STATUSES = new Set(["self", "active"]);
 const KNOWN_STATUSES = new Set(["self", "active", "inactive"]);
@@ -93,4 +93,16 @@ export function planRefresh({ repoDir, callerTemplatesDir }) {
   const removed = existing.filter((f) => !templateSet.has(f));
 
   return { unchanged, updated, added, removed };
+}
+
+export function applyRefresh({ plan, callerTemplatesDir, repoDir }) {
+  const written = [];
+  const toWrite = [...plan.added, ...plan.updated];
+  for (const name of toWrite) {
+    const dest = join(repoDir, ".github", "workflows", name);
+    mkdirSync(dirname(dest), { recursive: true });
+    copyFileSync(join(callerTemplatesDir, name), dest);
+    written.push(dest);
+  }
+  return written;
 }
