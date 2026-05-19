@@ -248,3 +248,75 @@ test("preflightAutoPR: existing local branch ⇒ throws", () => {
     /already exists/i,
   );
 });
+
+import { runPushPatches } from "../scripts/push-patches.mjs";
+
+test("runPushPatches --dry-run: returns plan without mutating filesystem or opening PRs", async () => {
+  // 1 fake org config + 1 fake consumer (in-tree clone, no remote)
+  const orgsPath = withTempConfig({ orgs: [
+    { name: "leebaroneau", retainer_status: "self", fleet_repo: "leebaroneau/pipeline-fleet" },
+  ]});
+  // 2 templates in a fake "pipeline-core" templates dir
+  const tpl = fakeTemplatesDir({
+    "pipeline-branch-name.yml": "name: branch-name v2\n",
+    "pipeline-doctor.yml":      "name: doctor v1\n",
+  });
+  // The consumer has pipeline-branch-name.yml at v1 and is missing pipeline-doctor
+  const consumerDir = fakeConsumer({ "pipeline-branch-name.yml": "name: branch-name v1\n" });
+  // listConsumerRepos is injected; cloneConsumer also injected to return the prepared dir
+  const summary = await runPushPatches({
+    orgsConfigPath: orgsPath,
+    callerTemplatesDir: tpl,
+    dryRun: true,
+    token: "fake",
+    listConsumerRepos: async () => [{ owner: "leebaroneau", name: "lee-dashboard", branch: "main", tier: 1 }],
+    cloneConsumer: async () => consumerDir,
+  });
+  assert.equal(summary.orgs.length, 1);
+  assert.equal(summary.orgs[0].repos.length, 1);
+  assert.deepEqual(summary.orgs[0].repos[0].plan.added,   ["pipeline-doctor.yml"]);
+  assert.deepEqual(summary.orgs[0].repos[0].plan.updated, ["pipeline-branch-name.yml"]);
+  assert.equal(summary.orgs[0].repos[0].prUrl, null, "dry-run does NOT open a PR");
+  // Confirm filesystem was NOT mutated
+  assert.equal(
+    readFileSync(join(consumerDir, ".github/workflows/pipeline-branch-name.yml"), "utf8"),
+    "name: branch-name v1\n",
+    "dry-run leaves consumer untouched",
+  );
+});
+
+test("runPushPatches: inactive org is skipped", async () => {
+  const orgsPath = withTempConfig({ orgs: [
+    { name: "ALX-Finance", retainer_status: "inactive", pinned_version: "v1.0.5", fleet_repo: "ALX-Finance/.github" },
+  ]});
+  const summary = await runPushPatches({
+    orgsConfigPath: orgsPath,
+    callerTemplatesDir: fakeTemplatesDir({}),
+    dryRun: true,
+    token: "fake",
+    listConsumerRepos: async () => { throw new Error("should not be called for inactive orgs"); },
+    cloneConsumer:     async () => { throw new Error("should not be called for inactive orgs"); },
+  });
+  assert.equal(summary.orgs.length, 0, "no org-level work for inactive orgs");
+  assert.equal(summary.skippedOrgs.length, 1);
+});
+
+test("runPushPatches: --owner filter restricts to a single active org", async () => {
+  const orgsPath = withTempConfig({ orgs: [
+    { name: "leebaroneau",     retainer_status: "self",   fleet_repo: "leebaroneau/pipeline-fleet" },
+    { name: "Haverford-Brands", retainer_status: "active", fleet_repo: "Haverford-Brands/.github" },
+  ]});
+  let calledFor = [];
+  const summary = await runPushPatches({
+    orgsConfigPath: orgsPath,
+    callerTemplatesDir: fakeTemplatesDir({}),
+    owners: ["Haverford-Brands"],
+    dryRun: true,
+    token: "fake",
+    listConsumerRepos: async ({ owner }) => { calledFor.push(owner); return []; },
+    cloneConsumer:     async () => { throw new Error("should not be called when consumer list is empty"); },
+  });
+  assert.deepEqual(calledFor, ["Haverford-Brands"]);
+  assert.equal(summary.orgs.length, 1);
+  assert.equal(summary.orgs[0].name, "Haverford-Brands");
+});

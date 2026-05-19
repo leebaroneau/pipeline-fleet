@@ -176,3 +176,52 @@ export function openRefreshPR({ repoDir, branch, written, newVersion, plan }) {
   }
   return run("gh", ["pr", "view", "--json", "url", "--jq", ".url"], { cwd: repoDir }).stdout.trim();
 }
+
+export async function runPushPatches({
+  orgsConfigPath,
+  callerTemplatesDir,
+  owners,                  // optional: filter active orgs to this allowlist
+  dryRun = false,
+  newVersion = "v1",       // PR title/body label
+  token = process.env.FLEET_PAT ?? process.env.GITHUB_TOKEN,
+  // Injected dependencies (defaults are real):
+  listConsumerRepos: listFn = listConsumerRepos,
+  cloneConsumer: cloneFn,
+  openPR: openFn = openRefreshPR,
+}) {
+  if (!token) throw new Error("runPushPatches needs FLEET_PAT or GITHUB_TOKEN.");
+  const { active, skipped, invalid } = loadOrgs(orgsConfigPath);
+  const filtered = owners?.length
+    ? active.filter((o) => owners.includes(o.name))
+    : active;
+
+  const orgsOut = [];
+  for (const org of filtered) {
+    const consumers = await listFn({ owner: org.name, fleetRepo: org.fleet_repo, token });
+    const repos = [];
+    for (const c of consumers) {
+      const repoDir = await cloneFn({ owner: c.owner, name: c.name, branch: c.branch, token });
+      try {
+        const plan = planRefresh({ repoDir, callerTemplatesDir });
+        const willWrite = plan.added.length + plan.updated.length;
+        if (willWrite === 0) {
+          repos.push({ slug: `${c.owner}/${c.name}`, plan, prUrl: null, action: "noop" });
+          continue;
+        }
+        if (dryRun) {
+          repos.push({ slug: `${c.owner}/${c.name}`, plan, prUrl: null, action: "dry-run" });
+          continue;
+        }
+        const branch = `chore/refresh-pipeline-core-${newVersion}`;
+        preflightAutoPR({ repoDir, branch });
+        const written = applyRefresh({ plan, callerTemplatesDir, repoDir });
+        const prUrl = openFn({ repoDir, branch, written, newVersion, plan });
+        repos.push({ slug: `${c.owner}/${c.name}`, plan, prUrl, action: "pr-opened" });
+      } catch (err) {
+        repos.push({ slug: `${c.owner}/${c.name}`, plan: null, prUrl: null, action: "error", error: redactToken(err.message) });
+      }
+    }
+    orgsOut.push({ name: org.name, fleet_repo: org.fleet_repo, repos });
+  }
+  return { orgs: orgsOut, skippedOrgs: skipped, invalidOrgs: invalid };
+}
