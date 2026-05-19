@@ -42,3 +42,58 @@ test("loadOrgs: unknown retainer_status lands in invalid, not silently in active
   assert.equal(r.invalid.length, 1);
   assert.match(r.invalid[0].reason, /retainer_status/);
 });
+
+import { listConsumerRepos } from "../scripts/push-patches.mjs";
+
+function fakeFetch(map) {
+  // map: { "<url>": { status, json } }
+  return async (url) => {
+    const entry = map[url];
+    if (!entry) return { ok: false, status: 404, statusText: "Not Found" };
+    return {
+      ok: entry.status === 200,
+      status: entry.status,
+      statusText: entry.status === 200 ? "OK" : "Error",
+      async json() { return entry.json; },
+      async text() { return JSON.stringify(entry.json); },
+    };
+  };
+}
+
+test("listConsumerRepos: returns owner+name pairs from repos.json", async () => {
+  const url = "https://api.github.com/repos/Haverford-Brands/.github/contents/config/repos.json";
+  const fetch = fakeFetch({
+    [url]: {
+      status: 200,
+      json: {
+        content: Buffer.from(JSON.stringify({
+          repos: [
+            { owner: "Haverford-Brands", name: "service-Auth-Gate", branch: "main", tier: 1 },
+            { owner: "Haverford-Brands", name: "Catnets.com.au",    branch: "main", tier: 2 },
+          ],
+        })).toString("base64"),
+      },
+    },
+  });
+  const r = await listConsumerRepos({ owner: "Haverford-Brands", fleetRepo: "Haverford-Brands/.github", token: "fake", fetch });
+  assert.equal(r.length, 2);
+  assert.equal(r[0].name, "service-Auth-Gate");
+  assert.equal(r[1].branch, "main");
+});
+
+test("listConsumerRepos: empty repos list returns []", async () => {
+  const url = "https://api.github.com/repos/Empty/.github/contents/config/repos.json";
+  const fetch = fakeFetch({
+    [url]: { status: 200, json: { content: Buffer.from(JSON.stringify({ repos: [] })).toString("base64") } },
+  });
+  const r = await listConsumerRepos({ owner: "Empty", fleetRepo: "Empty/.github", token: "fake", fetch });
+  assert.deepEqual(r, []);
+});
+
+test("listConsumerRepos: missing config/repos.json throws with a clear message", async () => {
+  const fetch = fakeFetch({});
+  await assert.rejects(
+    () => listConsumerRepos({ owner: "X", fleetRepo: "X/.github", token: "fake", fetch }),
+    /config\/repos\.json.*404/i,
+  );
+});

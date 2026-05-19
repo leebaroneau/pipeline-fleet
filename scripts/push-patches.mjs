@@ -38,3 +38,23 @@ export function loadOrgs(configPath) {
   }
   return { active, skipped, invalid };
 }
+
+export async function listConsumerRepos({ owner, fleetRepo, token, fetch = globalThis.fetch }) {
+  const url = `https://api.github.com/repos/${fleetRepo}/contents/config/repos.json`;
+  const res = await fetch(url, {
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${token}`,
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+  });
+  if (!res.ok) {
+    throw new Error(`config/repos.json fetch failed for ${fleetRepo}: ${res.status} ${res.statusText}`);
+  }
+  const body = await res.json();
+  const decoded = JSON.parse(Buffer.from(body.content, "base64").toString("utf8"));
+  const entries = Array.isArray(decoded) ? decoded : decoded.repos ?? [];
+  return entries
+    .filter((e) => e.owner && e.name)
+    .map((e) => ({ ...e, branch: e.branch ?? "main", tier: e.tier ?? 1 }));
+}
