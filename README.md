@@ -1,115 +1,91 @@
-# Pipeline Fleet
+# Pipeline Fleet (leebaroneau)
 
-Org-wide rollout management for [Pipeline Core](https://github.com/leebaroneau/pipeline-core). This repo:
+leebaroneau's personal Pipeline Core fleet **plus** the retainer registry that governs which other orgs receive cascading patches from upstream.
 
-- Lists every repo across our orgs that's a candidate for Pipeline Core (`config/repos.json`)
-- Runs a daily cron that audits each managed repo with the install doctor (`scripts/fleet-doctor.mjs`)
-- Renders the fleet status into this README and (after Phase 3) into each org's `.github/profile/README.md` dashboard so org members see their slice
+This repo is one of N independent org fleets — Haverford-Brands, ALX-Finance, Genvest-Property, and kwa-nguyen each have their own under `<org>/.github`. Every fleet (this one included) consumes the same reusable workflow from [`leebaroneau/pipeline-core`](https://github.com/leebaroneau/pipeline-core)`/.github/workflows/fleet.yml@v1`.
 
-## Status
+## Status (leebaroneau repos only)
 
 <!-- pipeline-fleet:tracker-start -->
-**1** repo under management · **1** OK · **0** failing · **1** with warnings
-
-_Updated 2026-05-19T02:56:40.582Z._
-
-| Repo | Status | Failures | Warnings |
-| --- | --- | ---: | ---: |
-| [`leebaroneau/lee-dashboard`](https://github.com/leebaroneau/lee-dashboard) | ⚠️ warn | 0 | 1 |
+_No repos under management yet. Add entries to `config/repos.json` and the next daily run will populate this table._
 <!-- pipeline-fleet:tracker-end -->
 
-_Updated by: `scripts/update-tracker.mjs`. Last updated: 2026-05-19T02:56:40.582Z._
+_Updated by: `scripts/update-tracker.mjs`. Last updated: never._
 
-## Adoption candidates
+## Retainer registry
 
-Inventoried 2026-05-19 from GitHub repo enumeration across the 4 orgs + personal.
+`config/orgs.json` declares which orgs leebaroneau manages patches for:
 
-### Tier 1 — active code repos (~19)
+| Org | Retainer status | Pinned version | Fleet repo |
+| --- | --- | --- | --- |
+| `leebaroneau` | self | floating `@v1` | `leebaroneau/pipeline-fleet` (this repo) |
+| `Haverford-Brands` | active | floating `@v1` | `Haverford-Brands/.github` |
+| `ALX-Finance` | active | floating `@v1` | `ALX-Finance/.github` |
+| `Genvest-Property` | active | floating `@v1` | `Genvest-Property/.github` |
+| `kwa-nguyen` | active | floating `@v1` | `kwa-nguyen/.github` |
 
-| Repo | Owner | Notes |
-| --- | --- | --- |
-| service-Haverford-Dev-API | Haverford-Brands | Most active code repo — Phase 3 pilot target |
-| app-Gateway | Haverford-Brands | |
-| app-Shopify-Sales | Haverford-Brands | |
-| service-Auth-Gate | Haverford-Brands | |
-| hwb-image-generator | Haverford-Brands | |
-| Marketing-Ops | Haverford-Brands | Python |
-| price-tool | Haverford-Brands | Python |
-| agent-haverford-state | Haverford-Brands | Python |
-| sales.koenigmachinery.com.au | Haverford-Brands | Hydrogen storefront |
-| quote.koenigmachinery.com.au | Haverford-Brands | Hydrogen storefront |
-| Template-Docker | Haverford-Brands | DO droplet template |
-| website | ALX-Finance | |
-| paperclip-hermes-gbrain | ALX-Finance | |
-| service-api | Genvest-Property | |
-| website | Genvest-Property | |
-| agent-genvest | Genvest-Property | |
-| agent-kwa | kwa-nguyen | |
-| THP-Strength | leebaroneau | |
-| Hobbyzenlife.com.au-HydrogenTS | leebaroneau | |
-| template-agent | leebaroneau | Source-of-truth template for `agent-haverford`, `agent-genvest`, `agent-kwa` deployments. Renamed 2026-05-19 from `paperclip-hermes-gbrain` to follow the role+scope naming convention. |
-| pipeline-core | leebaroneau | Self-host (already CI'd; pipeline install is optional dogfood) |
+When an org goes inactive, `pinned_version` gets set to the specific `v1.0.X` they had at handoff time and `push-patches.mjs` stops cascading new releases to it.
 
-### Tier 2 — Shopify theme repos (~28)
+## How patch propagation works
 
-All under `Haverford-Brands/*.com.au` (and `.co.nz`, `.co.uk`, `.com`, `.sg`). You opted for "full pipeline on themes too" — value is unified label palette and weekly drift signal across the brand fleet. Decision is reversible: if intake/slash-command overhead is wasted noise on themes after the pilot, drop them from `repos.json` and the cron stops touching them.
+```
+Upstream change in pipeline-core
+        │
+        ▼
+  cut new release (v1.0.X) — `v1` floating tag advances
+        │
+        ▼
+  scripts/push-patches.mjs (this repo) reads config/orgs.json
+        │
+        ├──► for each ACTIVE org: open a PR in each consumer repo to refresh caller templates
+        │
+        └──► INACTIVE orgs: skip (consumers stay on pinned_version)
+```
 
-Examples: `Catnets.com.au`, `Catnets.co.nz`, `Gutzbusta.com.au`, `Hardwarebox.com.au`, `Haverford.com.au`, `Koenigmachinery.com.au`, `Quatrasports.com.au`, `Shadematters.com.au`, `bmsaustralia.com.au`, `haverford-b2b`, etc.
-
-### Tier 3 — skipped
-
-`Haverford-Brands/.github`, `agent-haverford-data` (data mirror, not code), `Koenigmachinery.com.au-Wordpress` (stale), `app-cope` / `service-cin7Klaviyo` / `service-copeapi` (archived flows), `Birthing-Plan` / `boncharge` (personal/low-activity).
+`push-patches.mjs` lives in this repo because patch propagation is the prerogative of the platform owner (leebaroneau), not the consumer orgs.
 
 ## Architecture
 
 ```
-       config/repos.json (source of truth)
-                  │
-                  ▼
-   ┌───────────────────────────────┐         daily 09:00 UTC
-   │  .github/workflows/           │         workflow_dispatch
-   │    fleet-doctor.yml           │ ───────► scripts/fleet-doctor.mjs
-   └───────────────────────────────┘                 │
-                                                     ▼
-                                  For each managed repo:
-                                    git clone --depth 1 --sparse
-                                    node pipeline-core/scripts/doctor.mjs --json
-                                    collect ok / report / result
-                                                     │
-                                                     ▼
-                                          state/results.json
-                                                     │
-                          ┌──────────────────────────┴──────────────────────────┐
-                          ▼                                                      ▼
-              scripts/update-tracker.mjs                            scripts/update-org-dashboards.mjs
-                          │                                                      │
-                          ▼                                                      ▼
-                this README (tracker)                            <org>/.github/profile/README.md (×4)
+leebaroneau/pipeline-core           ← upstream framework
+  ├── .github/workflows/fleet.yml   ← reusable workflow each fleet consumes
+  ├── scripts/{discover,fleet-doctor,update-tracker,doctor,install}.mjs
+  └── templates/fleet/              ← skeleton for new org fleets
+
+leebaroneau/pipeline-fleet (THIS)   ← leebaroneau's own fleet + retainer registry
+  ├── config/repos.json             ← leebaroneau repos under management
+  ├── config/skip.json              ← leebaroneau exclusions
+  ├── config/orgs.json              ← retainer registry (all 5 orgs)
+  └── .github/workflows/fleet.yml   ← caller (owner: leebaroneau)
+
+Haverford-Brands/.github            ← HB's own fleet (independent)
+  ├── config/repos.json             ← HB repos under management
+  ├── config/skip.json              ← HB exclusions
+  └── .github/workflows/fleet.yml   ← caller (owner: Haverford-Brands)
+
+(same shape repeated for ALX-Finance, Genvest-Property, kwa-nguyen)
+```
+
+## Operations
+
+```bash
+# Manually trigger leebaroneau's fleet sweep:
+gh workflow run "Fleet — doctor + discover" --repo leebaroneau/pipeline-fleet
+
+# Discover-only (find new repos, don't audit existing):
+gh workflow run "Fleet — doctor + discover" --repo leebaroneau/pipeline-fleet -f mode=discover
 ```
 
 ## Auth
 
-The cron needs a Personal Access Token (Classic) with `repo`, `admin:org` (read), and `workflow` scopes against the 4 orgs (Haverford-Brands, ALX-Finance, Genvest-Property, kwa-nguyen) + personal. Stored as the repo secret `FLEET_PAT`.
+`FLEET_PAT` (repo secret on this repo): Personal Access Token Classic with `repo` + `read:org`, scoped to leebaroneau. Other orgs have their own scoped PAT in their own `.github` repo.
 
 ## Phase status
 
 | Phase | What | Status |
 | --- | --- | --- |
-| 1 | pipeline-core installer + self-CI + reusable doctor (v1.0.7) | ✅ done |
-| 2 | This repo: fleet-doctor scaffolding, daily cron, tracker | ✅ in progress |
-| 3 | Pilot install: `service-Haverford-Dev-API` + `Catnets.com.au` | ⏳ |
-| 4 | Batch install: remaining Tier 1 + themes (~41 repos) | ⏳ |
-| 5 | Per-org `.github/profile/README.md` dashboards activated | ⏳ |
-
-## Operations
-
-```bash
-# Run the fleet doctor locally against config/repos.json (needs $FLEET_PAT):
-make fleet-doctor
-
-# Re-render the tracker section in this README from the latest state/results.json:
-make tracker
-
-# Manually trigger the GitHub-hosted cron without waiting for the schedule:
-gh workflow run fleet-doctor.yml --repo leebaroneau/pipeline-fleet
-```
+| 1 | pipeline-core installer + self-CI + reusable fleet workflow (v1.0.10) | ✅ done |
+| 2 | This repo repurposed for leebaroneau-only + retainer registry | ✅ in progress |
+| 3 | Per-org `.github` fleets (Haverford-Brands, ALX-Finance, Genvest-Property, kwa-nguyen) | ⏳ |
+| 4 | `scripts/push-patches.mjs` patch cascade tool | ⏳ |
+| 5 | Per-org batch fan-out using the new infrastructure | ⏳ |

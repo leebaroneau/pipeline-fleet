@@ -1,0 +1,40 @@
+{
+  "_comment": "Retainer registry. Each org leebaroneau manages patches for. retainer_status='active' means new pipeline-core releases auto-cascade to that org's consumer repos via push-patches.mjs; 'inactive' means consumers stay frozen at pinned_version.",
+  "orgs": [
+    {
+      "name": "leebaroneau",
+      "retainer_status": "self",
+      "pinned_version": null,
+      "fleet_repo": "leebaroneau/pipeline-fleet",
+      "notes": "Personal org. Managed by this repo's own fleet workflow."
+    },
+    {
+      "name": "Haverford-Brands",
+      "retainer_status": "active",
+      "pinned_version": null,
+      "fleet_repo": "Haverford-Brands/.github",
+      "notes": "Primary commercial org. Receives all patch cascades."
+    },
+    {
+      "name": "ALX-Finance",
+      "retainer_status": "active",
+      "pinned_version": null,
+      "fleet_repo": "ALX-Finance/.github",
+      "notes": ""
+    },
+    {
+      "name": "Genvest-Property",
+      "retainer_status": "active",
+      "pinned_version": null,
+      "fleet_repo": "Genvest-Property/.github",
+      "notes": ""
+    },
+    {
+      "name": "kwa-nguyen",
+      "retainer_status": "active",
+      "pinned_version": null,
+      "fleet_repo": "kwa-nguyen/.github",
+      "notes": ""
+    }
+  ]
+}
