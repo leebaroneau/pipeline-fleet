@@ -209,3 +209,42 @@ test("redactToken: handles null/undefined gracefully", () => {
   assert.equal(redactToken(null), "");
   assert.equal(redactToken(undefined), "");
 });
+
+import { execSync } from "node:child_process";
+import { preflightAutoPR } from "../scripts/push-patches.mjs";
+
+function gitInit(dir) {
+  execSync(`git init -q -b main`, { cwd: dir });
+  execSync(`git config user.email test@example.com`, { cwd: dir });
+  execSync(`git config user.name Test`, { cwd: dir });
+  execSync(`git remote add origin https://example.com/x/y.git`, { cwd: dir });
+  writef(join(dir, ".keep"), "");
+  execSync(`git add .keep`, { cwd: dir });
+  execSync(`git commit -q -m initial`, { cwd: dir });
+}
+
+test("preflightAutoPR: clean working tree, branch absent ⇒ passes", () => {
+  const repo = mkdir(join(tmpdir(), "preflight-clean-"));
+  gitInit(repo);
+  assert.doesNotThrow(() => preflightAutoPR({ repoDir: repo, branch: "chore/refresh" }));
+});
+
+test("preflightAutoPR: dirty working tree ⇒ throws", () => {
+  const repo = mkdir(join(tmpdir(), "preflight-dirty-"));
+  gitInit(repo);
+  writef(join(repo, "dirty.txt"), "uncommitted");
+  assert.throws(
+    () => preflightAutoPR({ repoDir: repo, branch: "chore/refresh" }),
+    /clean working tree/i,
+  );
+});
+
+test("preflightAutoPR: existing local branch ⇒ throws", () => {
+  const repo = mkdir(join(tmpdir(), "preflight-branch-"));
+  gitInit(repo);
+  execSync(`git branch chore/refresh`, { cwd: repo });
+  assert.throws(
+    () => preflightAutoPR({ repoDir: repo, branch: "chore/refresh" }),
+    /already exists/i,
+  );
+});
