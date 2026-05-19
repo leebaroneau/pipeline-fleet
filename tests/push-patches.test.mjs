@@ -97,3 +97,71 @@ test("listConsumerRepos: missing config/repos.json throws with a clear message",
     /config\/repos\.json.*404/i,
   );
 });
+
+import { mkdtempSync as mkdir, writeFileSync as writef, mkdirSync as mkd } from "node:fs";
+import { planRefresh } from "../scripts/push-patches.mjs";
+
+function fakeTemplatesDir(files) {
+  const dir = mkdir(join(tmpdir(), "tpl-"));
+  for (const [name, body] of Object.entries(files)) {
+    writef(join(dir, name), body);
+  }
+  return dir;
+}
+
+function fakeConsumer(files) {
+  const dir = mkdir(join(tmpdir(), "cns-"));
+  mkd(join(dir, ".github", "workflows"), { recursive: true });
+  for (const [name, body] of Object.entries(files)) {
+    writef(join(dir, ".github", "workflows", name), body);
+  }
+  return dir;
+}
+
+test("planRefresh: empty consumer.github/workflows ⇒ every template is `added`", () => {
+  const tpl = fakeTemplatesDir({
+    "pipeline-branch-name.yml": "name: Pipeline — branch-name caller\n",
+    "pipeline-doctor.yml":      "name: Pipeline — doctor caller\n",
+  });
+  const repo = fakeConsumer({});
+  const r = planRefresh({ repoDir: repo, callerTemplatesDir: tpl });
+  assert.deepEqual(r.added.sort(),     ["pipeline-branch-name.yml", "pipeline-doctor.yml"]);
+  assert.deepEqual(r.updated,          []);
+  assert.deepEqual(r.unchanged,        []);
+  assert.deepEqual(r.removed,          []);
+});
+
+test("planRefresh: byte-equal existing caller ⇒ `unchanged`", () => {
+  const body = "name: Pipeline — branch-name caller\n";
+  const tpl = fakeTemplatesDir({ "pipeline-branch-name.yml": body });
+  const repo = fakeConsumer({ "pipeline-branch-name.yml": body });
+  const r = planRefresh({ repoDir: repo, callerTemplatesDir: tpl });
+  assert.deepEqual(r.unchanged, ["pipeline-branch-name.yml"]);
+  assert.deepEqual(r.updated,   []);
+  assert.deepEqual(r.added,     []);
+});
+
+test("planRefresh: byte-different existing caller ⇒ `updated`", () => {
+  const tpl  = fakeTemplatesDir({ "pipeline-pr-labels.yml": "with:\n  labeler-config: .github/labeler.yml\n" });
+  const repo = fakeConsumer({ "pipeline-pr-labels.yml": "with:\n  config-path: .github/labeler.yml\n" });
+  const r = planRefresh({ repoDir: repo, callerTemplatesDir: tpl });
+  assert.deepEqual(r.updated, ["pipeline-pr-labels.yml"]);
+  assert.deepEqual(r.added,   []);
+});
+
+test("planRefresh: caller exists in repo but NOT in templates ⇒ `removed` (informational; not auto-deleted)", () => {
+  const tpl  = fakeTemplatesDir({ "pipeline-branch-name.yml": "v1\n" });
+  const repo = fakeConsumer({ "pipeline-branch-name.yml": "v1\n", "pipeline-legacy-thing.yml": "old\n" });
+  const r = planRefresh({ repoDir: repo, callerTemplatesDir: tpl });
+  assert.deepEqual(r.removed, ["pipeline-legacy-thing.yml"]);
+  assert.deepEqual(r.updated, []);
+});
+
+test("planRefresh: non-pipeline YAMLs in workflows/ are ignored", () => {
+  const tpl  = fakeTemplatesDir({ "pipeline-branch-name.yml": "v1\n" });
+  const repo = fakeConsumer({ "pipeline-branch-name.yml": "v1\n", "custom-deploy.yml": "non-pipeline\n" });
+  const r = planRefresh({ repoDir: repo, callerTemplatesDir: tpl });
+  assert.deepEqual(r.unchanged, ["pipeline-branch-name.yml"]);
+  assert.deepEqual(r.removed,   []);
+  assert.deepEqual(r.updated,   []);
+});

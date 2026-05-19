@@ -10,7 +10,8 @@
 // workflow — it walks 5 orgs × N consumers and rate-limit hygiene + auth
 // scope warrant a human-in-the-loop trigger.
 
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync, readFileSync as readF, readdirSync } from "node:fs";
+import { join } from "node:path";
 
 const ACTIVE_STATUSES = new Set(["self", "active"]);
 const KNOWN_STATUSES = new Set(["self", "active", "inactive"]);
@@ -57,4 +58,39 @@ export async function listConsumerRepos({ owner, fleetRepo, token, fetch = globa
   return entries
     .filter((e) => e.owner && e.name)
     .map((e) => ({ ...e, branch: e.branch ?? "main", tier: e.tier ?? 1 }));
+}
+
+const PIPELINE_PREFIX = "pipeline-";
+const YAML_EXT = /\.(yml|yaml)$/;
+
+export function planRefresh({ repoDir, callerTemplatesDir }) {
+  const templates = readdirSync(callerTemplatesDir)
+    .filter((f) => f.startsWith(PIPELINE_PREFIX) && YAML_EXT.test(f));
+  const workflowsDir = join(repoDir, ".github", "workflows");
+  const existing = existsSync(workflowsDir)
+    ? readdirSync(workflowsDir).filter((f) => f.startsWith(PIPELINE_PREFIX) && YAML_EXT.test(f))
+    : [];
+
+  const unchanged = [];
+  const updated   = [];
+  const added     = [];
+
+  for (const name of templates) {
+    const tplBody = readF(join(callerTemplatesDir, name), "utf8");
+    if (!existing.includes(name)) {
+      added.push(name);
+      continue;
+    }
+    const consumerBody = readF(join(workflowsDir, name), "utf8");
+    if (consumerBody === tplBody) {
+      unchanged.push(name);
+    } else {
+      updated.push(name);
+    }
+  }
+
+  const templateSet = new Set(templates);
+  const removed = existing.filter((f) => !templateSet.has(f));
+
+  return { unchanged, updated, added, removed };
 }
