@@ -12,6 +12,7 @@
 
 import { readFileSync, existsSync, readFileSync as readF, readdirSync, writeFileSync, mkdirSync, copyFileSync } from "node:fs";
 import { join, dirname } from "node:path";
+import { spawnSync } from "node:child_process";
 
 const ACTIVE_STATUSES = new Set(["self", "active"]);
 const KNOWN_STATUSES = new Set(["self", "active", "inactive"]);
@@ -105,4 +106,25 @@ export function applyRefresh({ plan, callerTemplatesDir, repoDir }) {
     written.push(dest);
   }
   return written;
+}
+
+// Strip auth tokens out of any string that might land in logs or PR descriptions.
+// `git clone https://x-access-token:TOKEN@github.com/...` puts the token in argv
+// and any subsequent error message. Mirrors the helper in fleet-doctor.mjs.
+export function redactToken(s) {
+  return String(s ?? "").replace(/x-access-token:[^@\s]+@/g, "x-access-token:***@");
+}
+
+function run(cmd, args, opts = {}) {
+  const r = spawnSync(cmd, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], ...opts });
+  if (r.status !== 0 && !opts.allowFailure) {
+    const safeArgs = args.map(redactToken).join(" ");
+    const safeStream = redactToken(r.stderr || r.stdout);
+    const err = new Error(`${cmd} ${safeArgs} exited ${r.status}: ${safeStream}`);
+    err.status = r.status;
+    err.stdout = redactToken(r.stdout);
+    err.stderr = redactToken(r.stderr);
+    throw err;
+  }
+  return r;
 }

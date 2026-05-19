@@ -196,3 +196,16 @@ test("applyRefresh: no-op when plan is all-unchanged", () => {
   const written = applyRefresh({ plan, callerTemplatesDir: tpl, repoDir: repo });
   assert.deepEqual(written, []);
 });
+
+import { redactToken } from "../scripts/push-patches.mjs";
+
+test("redactToken: scrubs x-access-token:TOKEN@ patterns from error strings", () => {
+  const dirty = "git clone https://x-access-token:ghs_AAAAbbbb1234@github.com/Org/repo.git failed: ...";
+  const clean = redactToken(dirty);
+  assert.equal(clean, "git clone https://x-access-token:***@github.com/Org/repo.git failed: ...");
+});
+
+test("redactToken: handles null/undefined gracefully", () => {
+  assert.equal(redactToken(null), "");
+  assert.equal(redactToken(undefined), "");
+});
