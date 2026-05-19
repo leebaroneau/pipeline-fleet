@@ -249,6 +249,34 @@ test("preflightAutoPR: existing local branch ⇒ throws", () => {
   );
 });
 
+import { cloneConsumer } from "../scripts/push-patches.mjs";
+
+function makeBareRemote() {
+  // Create a working repo with content, then clone --bare to act as a "remote"
+  const work = mkdir(join(tmpdir(), "work-"));
+  execSync(`git init -q -b main`, { cwd: work });
+  execSync(`git config user.email a@b`, { cwd: work });
+  execSync(`git config user.name a`, { cwd: work });
+  mkd(join(work, ".github/workflows"), { recursive: true });
+  writef(join(work, ".github/workflows/pipeline-branch-name.yml"), "v1\n");
+  execSync(`git add .`, { cwd: work });
+  execSync(`git commit -q -m initial`, { cwd: work });
+  const bare = mkdir(join(tmpdir(), "bare-")) + ".git";
+  execSync(`git clone --bare ${work} ${bare}`);
+  return bare;
+}
+
+test("cloneConsumer: shallow-clones the remote, returns the dir, .github/workflows intact", async () => {
+  const bare = makeBareRemote();
+  // cloneConsumer uses fileURLToHttp via `--url-override` (test seam) so we
+  // don't actually hit github.com.
+  const dir = await cloneConsumer({
+    owner: "x", name: "y", branch: "main", token: "fake",
+    urlOverride: `file://${bare}`,
+  });
+  assert.ok(existsSync(join(dir, ".github/workflows/pipeline-branch-name.yml")));
+});
+
 import { runPushPatches } from "../scripts/push-patches.mjs";
 
 test("runPushPatches --dry-run: returns plan without mutating filesystem or opening PRs", async () => {

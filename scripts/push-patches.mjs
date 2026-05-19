@@ -10,8 +10,9 @@
 // workflow — it walks 5 orgs × N consumers and rate-limit hygiene + auth
 // scope warrant a human-in-the-loop trigger.
 
-import { readFileSync, existsSync, readFileSync as readF, readdirSync, writeFileSync, mkdirSync, copyFileSync } from "node:fs";
+import { readFileSync, existsSync, readFileSync as readF, readdirSync, writeFileSync, mkdirSync, mkdtempSync, copyFileSync } from "node:fs";
 import { join, dirname, relative } from "node:path";
+import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 
 const ACTIVE_STATUSES = new Set(["self", "active"]);
@@ -140,6 +141,13 @@ export function preflightAutoPR({ repoDir, branch }) {
   if (r.status === 0) {
     throw new Error(`Branch \`${branch}\` already exists in ${repoDir}.`);
   }
+}
+
+export async function cloneConsumer({ owner, name, branch = "main", token, urlOverride }) {
+  const dir = mkdtempSync(join(tmpdir(), `push-patches-${name}-`));
+  const url = urlOverride ?? `https://x-access-token:${token}@github.com/${owner}/${name}.git`;
+  run("git", ["clone", "--depth", "1", "--single-branch", "--branch", branch, url, dir]);
+  return dir;
 }
 
 function relativizePath(repoDir, absPath) {
