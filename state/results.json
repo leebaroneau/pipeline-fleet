@@ -1,0 +1,189 @@
+{
+  "generatedAt": "2026-05-19T02:53:32.907Z",
+  "startedAt": "2026-05-19T02:53:28.674Z",
+  "pipelineCorePath": "~/Documents/GitHub/lee-dashboard/00_repos/pipeline-core",
+  "totals": {
+    "managed": 1,
+    "ok": 1,
+    "failing": 0,
+    "warningsOnly": 1
+  },
+  "results": [
+    {
+      "owner": "leebaroneau",
+      "name": "lee-dashboard",
+      "branch": "main",
+      "tier": 1,
+      "notes": "Reference consumer — first repo to adopt Pipeline Core. Phase 0 ground truth.",
+      "result": {
+        "ok": true,
+        "failures": [],
+        "warnings": [
+          {
+            "check": "branchProtection",
+            "message": "Cannot read branch protection for `leebaroneau/lee-dashboard@main`: GitHub returned 403 (plan-gated)",
+            "remediation": "Branch protection on private repos requires GitHub Pro/Team/Enterprise (or a public repo). Until then, `pipeline/merge-gate` remains advisory — keep merging through the PR UI manually after CI passes.",
+            "detail": "403 Forbidden: {\"message\":\"Upgrade to GitHub Pro or make this repository public to enable this feature.\",\"documentation_url\":\"https://docs.github.com/rest/branches/branch-protection#get-branch-protection\",\"status\":\"403\"}"
+          }
+        ],
+        "checks": {
+          "config": {
+            "ok": true,
+            "config": {
+              "schema_version": 1,
+              "deployment": {
+                "installation_id": "lee-dashboard",
+                "cron_timezone": "Australia/Sydney"
+              },
+              "domains": [
+                {
+                  "name": "haverford-brands",
+                  "description": "Haverford brand portfolio (Cin7, Shopify)"
+                },
+                {
+                  "name": "alx-finance",
+                  "description": "ALX Finance — finance content + lead gen"
+                },
+                {
+                  "name": "genvest",
+                  "description": "Genvest — partnership flows + financial content"
+                },
+                {
+                  "name": "leebarone",
+                  "description": "Personal admin + projects (includes thp-strength sub-workstation)"
+                },
+                {
+                  "name": "root",
+                  "description": "Repo-level changes spanning multiple domains"
+                }
+              ],
+              "components": [
+                {
+                  "name": "agent-stack"
+                },
+                {
+                  "name": "brain"
+                },
+                {
+                  "name": "ci"
+                },
+                {
+                  "name": "workflows"
+                },
+                {
+                  "name": "skills"
+                },
+                {
+                  "name": "roadmap-sync"
+                },
+                {
+                  "name": "notion-sync"
+                }
+              ],
+              "path_mappings": [
+                {
+                  "paths": [
+                    "haverford-brands/**"
+                  ],
+                  "labels": [
+                    "domain:haverford-brands"
+                  ]
+                },
+                {
+                  "paths": [
+                    "alx-finance/**"
+                  ],
+                  "labels": [
+                    "domain:alx-finance"
+                  ]
+                },
+                {
+                  "paths": [
+                    "genvest/**"
+                  ],
+                  "labels": [
+                    "domain:genvest"
+                  ]
+                },
+                {
+                  "paths": [
+                    "leebarone/**"
+                  ],
+                  "labels": [
+                    "domain:leebarone"
+                  ]
+                },
+                {
+                  "paths": [
+                    ".github/workflows/**",
+                    ".github/labels.yml",
+                    ".github/pipeline-config.yml"
+                  ],
+                  "labels": [
+                    "domain:root",
+                    "component:ci",
+                    "component:workflows"
+                  ]
+                },
+                {
+                  "paths": [
+                    "**/00_resources/brain/**"
+                  ],
+                  "labels": [
+                    "component:brain"
+                  ]
+                },
+                {
+                  "paths": [
+                    "00_resources/agent-stack/**"
+                  ],
+                  "labels": [
+                    "component:agent-stack"
+                  ]
+                },
+                {
+                  "paths": [
+                    "scripts/sync-github-roadmaps*"
+                  ],
+                  "labels": [
+                    "component:roadmap-sync"
+                  ]
+                }
+              ],
+              "reviewer_policy": {
+                "default_required_reviewers": 1,
+                "by_component": {
+                  "workflows": 2,
+                  "ci": 2
+                }
+              }
+            }
+          },
+          "artifacts": {
+            "ok": true,
+            "failures": [],
+            "warnings": []
+          },
+          "callers": {
+            "ok": true,
+            "failures": [],
+            "warnings": []
+          },
+          "branchProtection": {
+            "ok": true,
+            "warnings": [
+              {
+                "check": "branchProtection",
+                "message": "Cannot read branch protection for `leebaroneau/lee-dashboard@main`: GitHub returned 403 (plan-gated)",
+                "remediation": "Branch protection on private repos requires GitHub Pro/Team/Enterprise (or a public repo). Until then, `pipeline/merge-gate` remains advisory — keep merging through the PR UI manually after CI passes.",
+                "detail": "403 Forbidden: {\"message\":\"Upgrade to GitHub Pro or make this repository public to enable this feature.\",\"documentation_url\":\"https://docs.github.com/rest/branches/branch-protection#get-branch-protection\",\"status\":\"403\"}"
+              }
+            ]
+          }
+        }
+      },
+      "exitCode": 0,
+      "error": null
+    }
+  ]
+}
