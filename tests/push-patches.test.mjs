@@ -348,3 +348,27 @@ test("runPushPatches: --owner filter restricts to a single active org", async ()
   assert.equal(summary.orgs.length, 1);
   assert.equal(summary.orgs[0].name, "Haverford-Brands");
 });
+
+test("integration: dry-run against 2 fake consumers reports 1 noop + 1 with adds", async () => {
+  const orgsPath = withTempConfig({ orgs: [
+    { name: "FakeOrg", retainer_status: "active", fleet_repo: "FakeOrg/.github" },
+  ]});
+  // Templates: 1 caller
+  const tpl = fakeTemplatesDir({ "pipeline-branch-name.yml": "v2\n" });
+  // Consumer A: already at v2 (noop). Consumer B: missing the caller (add).
+  const consumerA = fakeConsumer({ "pipeline-branch-name.yml": "v2\n" });
+  const consumerB = fakeConsumer({});
+  const summary = await runPushPatches({
+    orgsConfigPath: orgsPath,
+    callerTemplatesDir: tpl,
+    dryRun: true,
+    token: "fake",
+    listConsumerRepos: async () => [
+      { owner: "FakeOrg", name: "A", branch: "main", tier: 1 },
+      { owner: "FakeOrg", name: "B", branch: "main", tier: 1 },
+    ],
+    cloneConsumer: async ({ name }) => name === "A" ? consumerA : consumerB,
+  });
+  const actions = summary.orgs[0].repos.map((r) => r.action).sort();
+  assert.deepEqual(actions, ["dry-run", "noop"]);
+});

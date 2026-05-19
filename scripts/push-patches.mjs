@@ -233,3 +233,73 @@ export async function runPushPatches({
   }
   return { orgs: orgsOut, skippedOrgs: skipped, invalidOrgs: invalid };
 }
+
+// ─── CLI ────────────────────────────────────────────────────────────────────
+
+function parseArgs(argv) {
+  const args = { owners: [], dryRun: false };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === "--orgs-config")      args.orgsConfigPath     = argv[++i];
+    else if (a === "--templates")   args.callerTemplatesDir = argv[++i];
+    else if (a === "--owner")       args.owners.push(argv[++i]);
+    else if (a === "--new-version") args.newVersion         = argv[++i];
+    else if (a === "--dry-run")     args.dryRun             = true;
+    else if (a === "--help" || a === "-h") args.help        = true;
+  }
+  return args;
+}
+
+const HELP = `Usage: push-patches.mjs --orgs-config <path> --templates <path> [options]
+
+Cascades pipeline-core caller-workflow updates to every consumer repo across
+active retainer orgs. Opens one PR per repo if any caller has changed.
+
+Required:
+  --orgs-config <path>         config/orgs.json (pipeline-fleet)
+  --templates <path>           pipeline-core/templates/caller-workflows/
+
+Options:
+  --owner <name>               Restrict to one active org. Repeatable.
+  --new-version <ref>          Label shown in PR title/body (default: v1)
+  --dry-run                    Plan only — no clones write back, no PRs open
+  --help, -h                   Show this help
+
+Auth: FLEET_PAT or GITHUB_TOKEN env var.
+`;
+
+async function main() {
+  const args = parseArgs(process.argv.slice(2));
+  if (args.help) { process.stdout.write(HELP); return 0; }
+  if (!args.orgsConfigPath || !args.callerTemplatesDir) {
+    process.stderr.write("push-patches.mjs needs --orgs-config and --templates.\n");
+    return 1;
+  }
+  const summary = await runPushPatches({
+    orgsConfigPath:     args.orgsConfigPath,
+    callerTemplatesDir: args.callerTemplatesDir,
+    owners:             args.owners,
+    dryRun:             args.dryRun,
+    newVersion:         args.newVersion ?? "v1",
+    cloneConsumer,
+  });
+  // Concise stdout summary
+  for (const org of summary.orgs) {
+    process.stdout.write(`\n[${org.name}] ${org.repos.length} consumer(s):\n`);
+    for (const r of org.repos) {
+      const tag = r.action === "pr-opened" ? `→ ${r.prUrl}` : `(${r.action})`;
+      process.stdout.write(`  ${r.slug}  ${tag}\n`);
+    }
+  }
+  for (const s of summary.skippedOrgs) {
+    process.stdout.write(`\n[skip] ${s.name} (retainer_status=${s.retainer_status})\n`);
+  }
+  return 0;
+}
+
+if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith("/push-patches.mjs")) {
+  main().then((code) => process.exit(code)).catch((err) => {
+    process.stderr.write(`push-patches.mjs failed: ${redactToken(err.stack ?? err.message ?? err)}\n`);
+    process.exit(1);
+  });
+}
