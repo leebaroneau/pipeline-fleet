@@ -1,0 +1,31 @@
+# .github/workflows/fleet.yml
+#
+# leebaroneau's personal fleet caller. Audits every repo in config/repos.json
+# (currently scoped to leebaroneau-owned repos) and writes results back into
+# state/results.json + the tracker section of README.md. Per-org fleets in
+# Haverford-Brands/.github, ALX-Finance/.github, etc. all use this same
+# reusable workflow with their own owner+config.
+
+name: Fleet — doctor + discover
+
+on:
+  schedule:
+    - cron: "0 9 * * *"  # daily 09:00 UTC
+  workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        options: [doctor, discover, both]
+        default: both
+        description: doctor=audit existing repos · discover=find new ones · both
+
+jobs:
+  fleet:
+    uses: leebaroneau/pipeline-core/.github/workflows/fleet.yml@v1
+    permissions:
+      contents: write
+    with:
+      owner: leebaroneau
+      mode: ${{ inputs.mode || 'both' }}
+    secrets:
+      FLEET_PAT: ${{ secrets.FLEET_PAT }}

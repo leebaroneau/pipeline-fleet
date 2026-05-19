@@ -1,0 +1,16 @@
+{
+  "_comment": "leebaroneau-scoped denylist. Discovery output = (leebaroneau's non-archived non-fork repos) - (repos.json) - (skip.json).",
+  "repos": [
+    { "owner": "leebaroneau", "name": "Birthing-Plan", "reason": "Personal/low-activity repo" },
+    { "owner": "leebaroneau", "name": "boncharge", "reason": "Personal/low-activity repo" },
+    { "owner": "leebaroneau", "name": "Projects", "reason": "Personal learning project" },
+    { "owner": "leebaroneau", "name": "Shopify-Apps", "reason": "Stale" },
+    { "owner": "leebaroneau", "name": "Shopify-liquid-2.0--Vite-Tailwind", "reason": "Stale public sample" },
+    { "owner": "leebaroneau", "name": "hobbyzenlife.com.au", "reason": "Legacy Liquid theme (replaced by HydrogenTS)" },
+    { "owner": "leebaroneau", "name": "hobbyzenlife.com.au-Hydrogen", "reason": "Older Hydrogen version (replaced by HydrogenTS)" },
+    { "owner": "leebaroneau", "name": "notion-github-sync", "reason": "Small utility script, not pipeline-managed" },
+    { "owner": "leebaroneau", "name": "pipeline-core", "reason": "The pipeline itself; manages its own CI" },
+    { "owner": "leebaroneau", "name": "pipeline-fleet", "reason": "This repo; the fleet manager itself" },
+    { "owner": "leebaroneau", "name": "pipeline-core-test", "reason": "Sandbox repo for testing pipeline-core" }
+  ]
+}
