@@ -1,0 +1,87 @@
+{
+  "owner": "leebaroneau",
+  "managed": [
+    {
+      "owner": "leebaroneau",
+      "name": "lee-dashboard",
+      "branch": "main",
+      "tier": 1,
+      "notes": "Reference consumer — first repo to adopt Pipeline Core. Phase 0 ground truth."
+    }
+  ],
+  "skipped": [
+    {
+      "owner": "leebaroneau",
+      "name": "Birthing-Plan",
+      "reason": "Personal/low-activity repo"
+    },
+    {
+      "owner": "leebaroneau",
+      "name": "boncharge",
+      "reason": "Personal/low-activity repo"
+    },
+    {
+      "owner": "leebaroneau",
+      "name": "Projects",
+      "reason": "Personal learning project"
+    },
+    {
+      "owner": "leebaroneau",
+      "name": "Shopify-Apps",
+      "reason": "Stale"
+    },
+    {
+      "owner": "leebaroneau",
+      "name": "Shopify-liquid-2.0--Vite-Tailwind",
+      "reason": "Stale public sample"
+    },
+    {
+      "owner": "leebaroneau",
+      "name": "hobbyzenlife.com.au",
+      "reason": "Legacy Liquid theme (replaced by HydrogenTS)"
+    },
+    {
+      "owner": "leebaroneau",
+      "name": "hobbyzenlife.com.au-Hydrogen",
+      "reason": "Older Hydrogen version (replaced by HydrogenTS)"
+    },
+    {
+      "owner": "leebaroneau",
+      "name": "notion-github-sync",
+      "reason": "Small utility script, not pipeline-managed"
+    },
+    {
+      "owner": "leebaroneau",
+      "name": "pipeline-core",
+      "reason": "The pipeline itself; manages its own CI"
+    },
+    {
+      "owner": "leebaroneau",
+      "name": "pipeline-fleet",
+      "reason": "This repo; the fleet manager itself"
+    },
+    {
+      "owner": "leebaroneau",
+      "name": "pipeline-core-test",
+      "reason": "Sandbox repo for testing pipeline-core"
+    }
+  ],
+  "candidates": [
+    {
+      "owner": "leebaroneau",
+      "name": "template-agent",
+      "visibility": "public",
+      "primaryLanguage": "JavaScript",
+      "updatedAt": "2026-05-19T03:19:00Z",
+      "description": null
+    }
+  ],
+  "counts": {
+    "managed": 1,
+    "skipped": 11,
+    "candidates": 1,
+    "archived": 0,
+    "forks": 1
+  },
+  "generatedAt": "2026-05-19T05:10:33.257Z"
+}
