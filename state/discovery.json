@@ -7,6 +7,12 @@
       "branch": "main",
       "tier": 1,
       "notes": "Reference consumer — first repo to adopt Pipeline Core. Phase 0 ground truth."
+    },
+    {
+      "owner": "leebaroneau",
+      "name": "template-agent",
+      "branch": "main",
+      "tier": 1
     }
   ],
   "skipped": [
@@ -66,22 +72,13 @@
       "reason": "Sandbox repo for testing pipeline-core"
     }
   ],
-  "candidates": [
-    {
-      "owner": "leebaroneau",
-      "name": "template-agent",
-      "visibility": "public",
-      "primaryLanguage": "JavaScript",
-      "updatedAt": "2026-05-19T03:19:00Z",
-      "description": null
-    }
-  ],
+  "candidates": [],
   "counts": {
-    "managed": 1,
+    "managed": 2,
     "skipped": 11,
-    "candidates": 1,
+    "candidates": 0,
     "archived": 0,
     "forks": 1
   },
-  "generatedAt": "2026-05-19T11:56:05.084Z"
+  "generatedAt": "2026-05-19T22:20:11.184Z"
 }

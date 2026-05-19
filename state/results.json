@@ -1,11 +1,10 @@
 {
-  "generatedAt": "2026-05-19T02:56:40.582Z",
-  "startedAt": "2026-05-19T02:56:38.776Z",
-  "pipelineCorePath": "~/work/pipeline-fleet/pipeline-fleet/.pipeline-core",
+  "generatedAt": "2026-05-19T22:20:10.726Z",
+  "startedAt": "2026-05-19T22:20:07.784Z",
   "totals": {
-    "managed": 1,
+    "managed": 2,
     "ok": 1,
-    "failing": 0,
+    "failing": 1,
     "warningsOnly": 1
   },
   "results": [
@@ -183,6 +182,145 @@
         }
       },
       "exitCode": 0,
+      "error": null
+    },
+    {
+      "owner": "leebaroneau",
+      "name": "template-agent",
+      "branch": "main",
+      "tier": 1,
+      "result": {
+        "ok": false,
+        "failures": [
+          {
+            "check": "branchProtection",
+            "message": "No branch protection rule on `main`",
+            "remediation": "In Settings → Branches, add a protection rule for `main` that requires `pipeline/merge-gate`."
+          }
+        ],
+        "warnings": [],
+        "checks": {
+          "config": {
+            "ok": true,
+            "config": {
+              "schema_version": 1,
+              "deployment": {
+                "installation_id": "pipeline-consumer",
+                "cron_timezone": "America/New_York"
+              },
+              "domains": [
+                {
+                  "name": "frontend",
+                  "description": "User-facing UI (web, mobile)"
+                },
+                {
+                  "name": "backend",
+                  "description": "Server-side services, APIs"
+                },
+                {
+                  "name": "infra",
+                  "description": "Infrastructure, CI/CD, deployment"
+                }
+              ],
+              "components": [
+                {
+                  "name": "auth",
+                  "description": "Authentication / session handling"
+                },
+                {
+                  "name": "payments",
+                  "description": "Payment processing"
+                },
+                {
+                  "name": "search"
+                }
+              ],
+              "path_mappings": [
+                {
+                  "paths": [
+                    "src/web/**",
+                    "src/mobile/**"
+                  ],
+                  "labels": [
+                    "domain:frontend"
+                  ]
+                },
+                {
+                  "paths": [
+                    "src/api/**",
+                    "src/services/**"
+                  ],
+                  "labels": [
+                    "domain:backend"
+                  ]
+                },
+                {
+                  "paths": [
+                    "infra/**",
+                    ".github/**",
+                    "Dockerfile*"
+                  ],
+                  "labels": [
+                    "domain:infra"
+                  ]
+                },
+                {
+                  "paths": [
+                    "src/**/auth/**"
+                  ],
+                  "labels": [
+                    "component:auth"
+                  ]
+                },
+                {
+                  "paths": [
+                    "src/**/payments/**"
+                  ],
+                  "labels": [
+                    "component:payments"
+                  ]
+                },
+                {
+                  "paths": [
+                    "src/**/search/**"
+                  ],
+                  "labels": [
+                    "component:search"
+                  ]
+                }
+              ],
+              "reviewer_policy": {
+                "default_required_reviewers": 1,
+                "by_component": {
+                  "infra": 2,
+                  "auth": 2
+                }
+              }
+            }
+          },
+          "artifacts": {
+            "ok": true,
+            "failures": [],
+            "warnings": []
+          },
+          "callers": {
+            "ok": true,
+            "failures": [],
+            "warnings": []
+          },
+          "branchProtection": {
+            "ok": false,
+            "failures": [
+              {
+                "check": "branchProtection",
+                "message": "No branch protection rule on `main`",
+                "remediation": "In Settings → Branches, add a protection rule for `main` that requires `pipeline/merge-gate`."
+              }
+            ]
+          }
+        }
+      },
+      "exitCode": 1,
       "error": null
     }
   ]
