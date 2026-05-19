@@ -1,12 +1,18 @@
 {
-  "_comment": "Source-of-truth list of repos under Pipeline Core management. Each entry: { name, owner, branch (default main), tier (1=active code, 2=theme), notes }. Adding a row here causes the daily fleet-doctor cron to start auditing it.",
+  "_comment": "Per-org allowlist of repos under Pipeline Core management. Each entry: {owner, name, branch (default main), tier (1=active code, 2=theme), notes}. The fleet doctor audits each daily.",
   "repos": [
     {
       "owner": "leebaroneau",
       "name": "lee-dashboard",
       "branch": "main",
       "tier": 1,
-      "notes": "Reference consumer — first repo to adopt Pipeline Core. Phase 0 ground truth."
+      "notes": "Reference consumer \u2014 first repo to adopt Pipeline Core. Phase 0 ground truth."
+    },
+    {
+      "owner": "leebaroneau",
+      "name": "template-agent",
+      "branch": "main",
+      "tier": 1
     }
   ]
 }
