@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-05-19T02:53:32.907Z",
-  "startedAt": "2026-05-19T02:53:28.674Z",
-  "pipelineCorePath": "~/Documents/GitHub/lee-dashboard/00_repos/pipeline-core",
+  "generatedAt": "2026-05-19T02:56:40.582Z",
+  "startedAt": "2026-05-19T02:56:38.776Z",
+  "pipelineCorePath": "~/work/pipeline-fleet/pipeline-fleet/.pipeline-core",
   "totals": {
     "managed": 1,
     "ok": 1,

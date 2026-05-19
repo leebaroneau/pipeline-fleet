@@ -11,14 +11,14 @@ Org-wide rollout management for [Pipeline Core](https://github.com/leebaroneau/p
 <!-- pipeline-fleet:tracker-start -->
 **1** repo under management · **1** OK · **0** failing · **1** with warnings
 
-_Updated 2026-05-19T02:53:32.907Z._
+_Updated 2026-05-19T02:56:40.582Z._
 
 | Repo | Status | Failures | Warnings |
 | --- | --- | ---: | ---: |
 | [`leebaroneau/lee-dashboard`](https://github.com/leebaroneau/lee-dashboard) | ⚠️ warn | 0 | 1 |
 <!-- pipeline-fleet:tracker-end -->
 
-_Updated by: `scripts/update-tracker.mjs`. Last updated: 2026-05-19T02:53:32.907Z._
+_Updated by: `scripts/update-tracker.mjs`. Last updated: 2026-05-19T02:56:40.582Z._
 
 ## Adoption candidates
 
