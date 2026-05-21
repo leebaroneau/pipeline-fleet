@@ -10,36 +10,18 @@
 // workflow — it walks 5 orgs × N consumers and rate-limit hygiene + auth
 // scope warrant a human-in-the-loop trigger.
 
-import { readFileSync, existsSync, readFileSync as readF, readdirSync, writeFileSync, mkdirSync, mkdtempSync, copyFileSync } from "node:fs";
+import { existsSync, readFileSync as readF, readdirSync, mkdirSync, mkdtempSync, copyFileSync } from "node:fs";
 import { join, dirname, relative } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
-
-const ACTIVE_STATUSES = new Set(["self", "active"]);
-const KNOWN_STATUSES = new Set(["self", "active", "inactive"]);
+import { loadOrgRegistry, patchTargets } from "./lib/orgs-config.mjs";
 
 export function loadOrgs(configPath) {
-  const raw = JSON.parse(readFileSync(configPath, "utf8"));
-  const entries = Array.isArray(raw) ? raw : raw.orgs ?? [];
-  const active = [];
-  const skipped = [];
-  const invalid = [];
-  for (const e of entries) {
-    if (!e.name) {
-      invalid.push({ entry: e, reason: "missing name" });
-      continue;
-    }
-    if (!KNOWN_STATUSES.has(e.retainer_status)) {
-      invalid.push({ entry: e, reason: `unknown retainer_status: ${e.retainer_status}` });
-      continue;
-    }
-    if (ACTIVE_STATUSES.has(e.retainer_status)) {
-      active.push(e);
-    } else {
-      skipped.push(e);
-    }
-  }
-  return { active, skipped, invalid };
+  const registry = loadOrgRegistry(configPath);
+  const active = patchTargets(registry);
+  const selected = new Set(active.map((org) => org.name));
+  const skipped = registry.orgs.filter((org) => !selected.has(org.name));
+  return { active, skipped, invalid: registry.invalid };
 }
 
 export async function listConsumerRepos({ owner, fleetRepo, token, fetch = globalThis.fetch }) {
@@ -198,10 +180,10 @@ export async function runPushPatches({
   openPR: openFn = openRefreshPR,
 }) {
   if (!token) throw new Error("runPushPatches needs FLEET_PAT or GITHUB_TOKEN.");
-  const { active, skipped, invalid } = loadOrgs(orgsConfigPath);
-  const filtered = owners?.length
-    ? active.filter((o) => owners.includes(o.name))
-    : active;
+  const registry = loadOrgRegistry(orgsConfigPath);
+  const filtered = patchTargets(registry, { owners });
+  const selected = new Set(filtered.map((org) => org.name));
+  const skipped = registry.orgs.filter((org) => !selected.has(org.name));
 
   const orgsOut = [];
   for (const org of filtered) {
@@ -231,7 +213,7 @@ export async function runPushPatches({
     }
     orgsOut.push({ name: org.name, fleet_repo: org.fleet_repo, repos });
   }
-  return { orgs: orgsOut, skippedOrgs: skipped, invalidOrgs: invalid };
+  return { orgs: orgsOut, skippedOrgs: skipped, invalidOrgs: registry.invalid };
 }
 
 // ─── CLI ────────────────────────────────────────────────────────────────────

@@ -347,6 +347,30 @@ test("runPushPatches: --owner filter restricts to a single active org", async ()
   assert.deepEqual(calledFor, ["Haverford-Brands"]);
   assert.equal(summary.orgs.length, 1);
   assert.equal(summary.orgs[0].name, "Haverford-Brands");
+  assert.deepEqual(summary.skippedOrgs.map((org) => org.name), ["leebaroneau"]);
+});
+
+test("runPushPatches: skippedOrgs are normalized separately from invalidOrgs", async () => {
+  const orgsPath = withTempConfig({ orgs: [
+    { name: "Active", retainer_status: "active", fleet_repo: "Active/.github" },
+    { name: "PatchesOff", retainer_status: "active", patches_enabled: false, fleet_repo: "PatchesOff/.github" },
+    { name: "Inactive", retainer_status: "inactive", pinned_version: "v1.0.11", fleet_repo: "Inactive/.github" },
+    { name: "InvalidInactive", retainer_status: "inactive", fleet_repo: "InvalidInactive/.github" },
+  ]});
+  const summary = await runPushPatches({
+    orgsConfigPath: orgsPath,
+    callerTemplatesDir: fakeTemplatesDir({}),
+    owners: ["Active"],
+    dryRun: true,
+    token: "fake",
+    listConsumerRepos: async () => [],
+    cloneConsumer:     async () => { throw new Error("should not be called when consumer list is empty"); },
+  });
+  assert.deepEqual(summary.orgs.map((org) => org.name), ["Active"]);
+  assert.deepEqual(summary.skippedOrgs.map((org) => org.name), ["PatchesOff", "Inactive"]);
+  assert.equal(summary.skippedOrgs[0].deployment_mode, "retainer-coolify");
+  assert.equal(summary.invalidOrgs.length, 1);
+  assert.match(summary.invalidOrgs[0].reason, /pinned_version/);
 });
 
 test("integration: dry-run against 2 fake consumers reports 1 noop + 1 with adds", async () => {
