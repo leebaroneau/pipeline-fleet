@@ -85,7 +85,9 @@ gh workflow run "Fleet — doctor + discover" --repo leebaroneau/pipeline-fleet 
 
 ### Retainer-hosted Coolify runner
 
-Retainer orgs can run the fleet sweep as a one-shot Coolify service using the Docker packaging in this repo:
+Retainer-hosted mode runs the daily fleet sweep on each retainer's Coolify server. Lee controls template releases and patch pushes from this repo, but runtime execution and org-scoped tokens live with the retainer.
+
+Retainer orgs can run the sweep as a one-shot Coolify service using the Docker packaging in this repo:
 
 - [`Dockerfile`](Dockerfile) builds a Node 22 image with `git` and bakes in `node scripts/fleet-runner.mjs --once` as the container command.
 - [`docker-compose.coolify.yml`](docker-compose.coolify.yml) defines the `pipeline-fleet-runner` service and required runtime environment.
@@ -93,7 +95,7 @@ Retainer orgs can run the fleet sweep as a one-shot Coolify service using the Do
 
 Deploy this on the retainer server. Schedule it from the Coolify UI or an external cron; each invocation performs one fleet run and exits. Default mode is `both`, with `COMMIT_CHANGES=1`, `ORGS_CONFIG_PATH=config/orgs.json`, and `PIPELINE_CORE_REF=v1`. If `pipeline-core` needs an authenticated clone, set `PIPELINE_CORE_TOKEN`.
 
-Offboarding means stop scheduling the runner and stop pushing updates for that org. The full operator guide will live separately.
+For setup, verification, offboarding, and repo boundary details, read [docs/retainer-hosted-fleet-runner.md](docs/retainer-hosted-fleet-runner.md).
 
 ## Auth
 
