@@ -483,6 +483,69 @@ test("runPushPatches: includeInactive defaults callerRef and metadata to pinned_
   );
 });
 
+test("runPushPatches: includeInactive accepts explicit callerRef when inactive org has no pinned_version", async () => {
+  const orgsPath = withTempConfig({ orgs: [
+    {
+      name: "ALX-Finance",
+      retainer_status: "inactive",
+      fleet_repo: "ALX-Finance/.github",
+    },
+  ]});
+  const tpl = fakeTemplatesDir({
+    "pipeline-branch-name.yml": [
+      "jobs:",
+      "  branch:",
+      "    uses: leebaroneau/pipeline-core/.github/workflows/pipeline-branch-name.yml@v1",
+      "",
+    ].join("\n"),
+  });
+  const consumerDir = fakeConsumer({
+    "pipeline-branch-name.yml": [
+      "jobs:",
+      "  branch:",
+      "    uses: leebaroneau/pipeline-core/.github/workflows/pipeline-branch-name.yml@v1",
+      "",
+    ].join("\n"),
+  });
+  gitInitAll(consumerDir);
+  let prArgs;
+
+  const summary = await runPushPatches({
+    orgsConfigPath: orgsPath,
+    callerTemplatesDir: tpl,
+    includeInactive: true,
+    owners: ["ALX-Finance"],
+    callerRef: "v1.0.11",
+    token: "fake",
+    listConsumerRepos: async ({ owner, fleetRepo }) => {
+      assert.equal(owner, "ALX-Finance");
+      assert.equal(fleetRepo, "ALX-Finance/.github");
+      return [{ owner: "ALX-Finance", name: "alx-site", branch: "main", tier: 1 }];
+    },
+    cloneConsumer: async () => consumerDir,
+    openPR: async (args) => {
+      prArgs = args;
+      return "https://example.com/pr/2";
+    },
+  });
+
+  assert.equal(summary.orgs[0].name, "ALX-Finance");
+  assert.equal(summary.orgs[0].repos[0].action, "pr-opened");
+  assert.equal(prArgs.newVersion, "v1.0.11");
+  assert.equal(prArgs.branch, "chore/refresh-pipeline-core-v1.0.11");
+  assert.deepEqual(summary.orgs[0].repos[0].plan.updated, ["pipeline-branch-name.yml"]);
+  assert.equal(
+    readFileSync(join(consumerDir, ".github/workflows/pipeline-branch-name.yml"), "utf8"),
+    [
+      "jobs:",
+      "  branch:",
+      "    uses: leebaroneau/pipeline-core/.github/workflows/pipeline-branch-name.yml@v1.0.11",
+      "",
+    ].join("\n"),
+  );
+  assert.equal(summary.invalidOrgs.length, 1, "normal registry invalid row is preserved");
+});
+
 test("runPushPatches: includeInactive does not bypass patches_enabled for active orgs", async () => {
   const orgsPath = withTempConfig({ orgs: [
     {

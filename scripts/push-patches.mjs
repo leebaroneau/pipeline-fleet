@@ -205,7 +205,19 @@ export async function runPushPatches({
     if (invalidPinned && callerRef === DEFAULT_CALLER_REF) {
       throw new Error(`includeInactive handoff for ${owner} needs --caller-ref because the org has no pinned_version.`);
     }
-    const org = registry.orgs.find((entry) => entry.name === owner);
+    let org = registry.orgs.find((entry) => entry.name === owner);
+    if (!org && invalidPinned && callerRef !== DEFAULT_CALLER_REF) {
+      org = {
+        name: invalidPinned.entry.name,
+        retainer_status: "inactive",
+        deployment_mode: invalidPinned.entry.deployment_mode ?? "retainer-coolify",
+        runner_enabled: invalidPinned.entry.runner_enabled ?? true,
+        patches_enabled: false,
+        pinned_version: null,
+        fleet_repo: invalidPinned.entry.fleet_repo,
+        notes: invalidPinned.entry.notes ?? "",
+      };
+    }
     if (!org) {
       throw new Error(`includeInactive handoff could not find normalized org ${owner}.`);
     }
