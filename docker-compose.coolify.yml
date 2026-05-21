@@ -1,0 +1,13 @@
+services:
+  pipeline-fleet-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      FLEET_OWNER: ${FLEET_OWNER:?FLEET_OWNER is required}
+      FLEET_PAT: ${FLEET_PAT:?FLEET_PAT is required}
+      ORGS_CONFIG_PATH: ${ORGS_CONFIG_PATH:-config/orgs.json}
+      MODE: ${MODE:-both}
+      COMMIT_CHANGES: ${COMMIT_CHANGES:-1}
+      PIPELINE_CORE_REF: ${PIPELINE_CORE_REF:-v1}
+    restart: "no"
