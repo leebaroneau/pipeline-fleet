@@ -1,10 +1,8 @@
-# .github/workflows/fleet.yml
+# .github/workflows/fleet.yml  (in an org's `.github` repo)
 #
-# leebaroneau's personal fleet caller. Audits every repo in config/repos.json
-# (currently scoped to leebaroneau-owned repos) and writes results back into
-# state/results.json + the tracker section of README.md. Per-org fleets in
-# Haverford-Brands/.github, ALX-Finance/.github, etc. all use this same
-# reusable workflow with their own owner+config.
+# Caller for pipeline-core's reusable fleet workflow. Each org has its own copy
+# with its own `owner:` value pointing at itself. The reusable workflow handles
+# the actual audit + discovery + tracker update.
 
 name: Fleet — doctor + discover
 
@@ -27,5 +25,6 @@ jobs:
     with:
       owner: leebaroneau
       mode: ${{ inputs.mode || 'both' }}
+      runner: '["ubuntu-latest"]'  # carve-out: no self-hosted runner pool deployed for this retainer
     secrets:
       FLEET_PAT: ${{ secrets.FLEET_PAT }}
