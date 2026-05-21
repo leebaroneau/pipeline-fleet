@@ -91,7 +91,9 @@ Retainer orgs can run the fleet sweep as a one-shot Coolify service using the Do
 - [`docker-compose.coolify.yml`](docker-compose.coolify.yml) defines the `pipeline-fleet-runner` service and required runtime environment.
 - [`.env.example`](.env.example) shows the Haverford-style env shape; set `FLEET_PAT` to the scoped retainer fleet PAT before deploying.
 
-Default mode is `both`, with `COMMIT_CHANGES=1`, `ORGS_CONFIG_PATH=config/orgs.json`, and `PIPELINE_CORE_REF=v1`. The full operator guide will live separately.
+Deploy this on the retainer server. Schedule it from the Coolify UI or an external cron; each invocation performs one fleet run and exits. Default mode is `both`, with `COMMIT_CHANGES=1`, `ORGS_CONFIG_PATH=config/orgs.json`, and `PIPELINE_CORE_REF=v1`. If `pipeline-core` needs an authenticated clone, set `PIPELINE_CORE_TOKEN`.
+
+Offboarding means stop scheduling the runner and stop pushing updates for that org. The full operator guide will live separately.
 
 ## Auth
 

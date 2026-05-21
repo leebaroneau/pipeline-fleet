@@ -10,4 +10,5 @@ services:
       MODE: ${MODE:-both}
       COMMIT_CHANGES: ${COMMIT_CHANGES:-1}
       PIPELINE_CORE_REF: ${PIPELINE_CORE_REF:-v1}
+      PIPELINE_CORE_TOKEN: ${PIPELINE_CORE_TOKEN:-}
     restart: "no"
