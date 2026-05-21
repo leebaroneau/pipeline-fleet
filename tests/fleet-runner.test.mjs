@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 import { planFleetRun, runFleetOnce } from "../scripts/fleet-runner.mjs";
+import { runCommand } from "../scripts/lib/git-runner.mjs";
 
 function tempConfig(body) {
   const dir = mkdtempSync(join(tmpdir(), "fleet-runner-config-"));
@@ -79,4 +80,120 @@ test("runFleetOnce selects exactly FLEET_OWNER and uses pinned core ref", async 
   assert.ok(calls.some((call) => call.args.some((arg) => arg.includes("fleet-doctor.mjs"))));
   assert.ok(calls.some((call) => call.args.some((arg) => arg.includes("update-tracker.mjs"))));
   assert.ok(!calls.some((call) => call.args.some((arg) => arg.includes("discover.mjs"))));
+});
+
+test("planFleetRun orders both mode as doctor, discover, update-tracker", () => {
+  const plan = planFleetRun({
+    org: {
+      name: "Haverford-Brands",
+      fleet_repo: "Haverford-Brands/.github",
+    },
+    mode: "both",
+    workDir: "/tmp/fleet-runner-test",
+  });
+
+  assert.deepEqual(
+    plan.commands
+      .filter((cmd) => cmd.name.startsWith("core:"))
+      .map((cmd) => cmd.name),
+    [
+      "core:clone",
+      "core:checkout",
+      "core:npm-ci",
+      "core:fleet-doctor",
+      "core:discover",
+      "core:update-tracker",
+    ],
+  );
+});
+
+test("runFleetOnce configures git identity before committing changed state", async () => {
+  const orgsConfigPath = tempConfig({
+    orgs: [{
+      name: "Haverford-Brands",
+      retainer_status: "active",
+      fleet_repo: "Haverford-Brands/.github",
+    }],
+  });
+  const calls = [];
+
+  const summary = await runFleetOnce({
+    env: {
+      ORGS_CONFIG_PATH: orgsConfigPath,
+      FLEET_OWNER: "Haverford-Brands",
+      FLEET_PAT: "token",
+      MODE: "doctor",
+      COMMIT_CHANGES: "1",
+      WORK_DIR: mkdtempSync(join(tmpdir(), "fleet-runner-commit-")),
+      QUIET: "1",
+    },
+    runCommand: (cmd, args, options) => {
+      calls.push({ cmd, args, cwd: options?.cwd, env: options?.env });
+      if (cmd === "git" && args.includes("status")) {
+        return { status: 0, stdout: " M state/results.json\n", stderr: "" };
+      }
+      return { status: 0, stdout: "", stderr: "" };
+    },
+  });
+
+  const gitArgs = calls.filter((call) => call.cmd === "git").map((call) => call.args);
+  const nameIndex = gitArgs.findIndex((args) => args.includes("user.name"));
+  const emailIndex = gitArgs.findIndex((args) => args.includes("user.email"));
+  const commitIndex = gitArgs.findIndex((args) => args.includes("commit"));
+
+  assert.equal(summary.orgs[0].git.committed, true);
+  assert.ok(nameIndex >= 0, "configures user.name");
+  assert.ok(emailIndex >= 0, "configures user.email");
+  assert.ok(commitIndex >= 0, "runs git commit");
+  assert.ok(nameIndex < commitIndex, "configures user.name before commit");
+  assert.ok(emailIndex < commitIndex, "configures user.email before commit");
+  assert.deepEqual(gitArgs[nameIndex].slice(-2), ["user.name", "github-actions[bot]"]);
+  assert.deepEqual(gitArgs[emailIndex].slice(-2), [
+    "user.email",
+    "41898282+github-actions[bot]@users.noreply.github.com",
+  ]);
+});
+
+test("runFleetOnce skips git config and commit when scoped state is unchanged", async () => {
+  const orgsConfigPath = tempConfig({
+    orgs: [{
+      name: "Haverford-Brands",
+      retainer_status: "active",
+      fleet_repo: "Haverford-Brands/.github",
+    }],
+  });
+  const calls = [];
+
+  const summary = await runFleetOnce({
+    env: {
+      ORGS_CONFIG_PATH: orgsConfigPath,
+      FLEET_OWNER: "Haverford-Brands",
+      FLEET_PAT: "token",
+      MODE: "doctor",
+      COMMIT_CHANGES: "1",
+      WORK_DIR: mkdtempSync(join(tmpdir(), "fleet-runner-noop-")),
+      QUIET: "1",
+    },
+    runCommand: (cmd, args, options) => {
+      calls.push({ cmd, args, cwd: options?.cwd, env: options?.env });
+      if (cmd === "git" && args.includes("status")) {
+        return { status: 0, stdout: "", stderr: "" };
+      }
+      return { status: 0, stdout: "", stderr: "" };
+    },
+  });
+
+  const gitArgs = calls.filter((call) => call.cmd === "git").map((call) => call.args);
+
+  assert.equal(summary.orgs[0].git.committed, false);
+  assert.ok(!gitArgs.some((args) => args.includes("user.name")));
+  assert.ok(!gitArgs.some((args) => args.includes("user.email")));
+  assert.ok(!gitArgs.some((args) => args.includes("commit")));
+});
+
+test("runCommand reports spawn failures clearly", () => {
+  assert.throws(
+    () => runCommand("__pipeline_fleet_missing_binary__", []),
+    /failed to start.*ENOENT/i,
+  );
 });

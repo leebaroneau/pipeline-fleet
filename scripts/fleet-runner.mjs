@@ -11,6 +11,8 @@ import { runCommand as defaultRunCommand } from "./lib/git-runner.mjs";
 const DEFAULT_CORE_REF = "v1";
 const DEFAULT_MODE = "both";
 const DEFAULT_ORGS_CONFIG_PATH = join(dirname(fileURLToPath(import.meta.url)), "..", "config", "orgs.json");
+const DEFAULT_GIT_USER_EMAIL = "41898282+github-actions[bot]@users.noreply.github.com";
+const DEFAULT_GIT_USER_NAME = "github-actions[bot]";
 const VALID_MODES = new Set(["doctor", "discover", "both"]);
 
 function gitHubTokenUrl(repo, token) {
@@ -58,22 +60,13 @@ export function planFleetRun({ org, mode = DEFAULT_MODE, commitChanges = true, w
   ];
 
   if (mode === "doctor" || mode === "both") {
-    commands.push(
-      command("core:fleet-doctor", "node", ["scripts/fleet-doctor.mjs"], {
-        cwd: coreDir,
-        env: {
-          CONFIG_PATH: configPath,
-          RESULTS_PATH: resultsPath,
-        },
-      }),
-      command("core:update-tracker", "node", ["scripts/update-tracker.mjs"], {
-        cwd: coreDir,
-        env: {
-          RESULTS_PATH: resultsPath,
-          README_PATH: readmePath,
-        },
-      }),
-    );
+    commands.push(command("core:fleet-doctor", "node", ["scripts/fleet-doctor.mjs"], {
+      cwd: coreDir,
+      env: {
+        CONFIG_PATH: configPath,
+        RESULTS_PATH: resultsPath,
+      },
+    }));
   }
 
   if (mode === "discover" || mode === "both") {
@@ -83,6 +76,16 @@ export function planFleetRun({ org, mode = DEFAULT_MODE, commitChanges = true, w
         OWNER: org.name,
         CONFIG_DIR: join(fleetDir, "config"),
         STATE_DIR: stateDir,
+      },
+    }));
+  }
+
+  if (mode === "doctor" || mode === "both") {
+    commands.push(command("core:update-tracker", "node", ["scripts/update-tracker.mjs"], {
+      cwd: coreDir,
+      env: {
+        RESULTS_PATH: resultsPath,
+        README_PATH: readmePath,
       },
     }));
   }
@@ -134,6 +137,8 @@ function executeCommitIfChanged({ plan, runCommand, env }) {
     return { committed: false, pushed: false, reason: "no changes" };
   }
 
+  runCommand("git", ["-C", plan.fleet.dir, "config", "user.name", DEFAULT_GIT_USER_NAME], { env });
+  runCommand("git", ["-C", plan.fleet.dir, "config", "user.email", DEFAULT_GIT_USER_EMAIL], { env });
   runCommand("git", ["-C", plan.fleet.dir, "add", "state", "README.md"], { env });
   runCommand("git", ["-C", plan.fleet.dir, "commit", "-m", `chore: update ${plan.org} fleet state`], { env });
   runCommand("git", ["-C", plan.fleet.dir, "push"], { env });
