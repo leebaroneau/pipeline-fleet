@@ -1,0 +1,40 @@
+# docker-compose.actions-runner.yml
+#
+# Self-hosted GitHub Actions runner pool for a retainer org. Deployed via Coolify
+# on the retainer's droplet. Two ephemeral runner slots: each container registers
+# with the org on startup, runs exactly one job, exits, then auto-restarts clean.
+#
+# Required env (set in Coolify):
+#   ACCESS_TOKEN    Classic PAT with admin:org scope, scoped to the retainer org.
+#   RUNNER_OWNER    The retainer org name (e.g. Haverford-Brands).
+#
+# Optional env (with sensible defaults):
+#   RUNNER_LABELS   Comma-separated labels. Default: self-hosted,linux,retainer
+#                   For Haverford, set to: self-hosted,linux,retainer,haverford
+#
+# See docs/self-hosted-runner-pool.md for setup, verify, rotate, scale, decommission.
+
+services:
+  runner-1:
+    image: myoung34/github-runner:latest
+    environment:
+      ACCESS_TOKEN: ${ACCESS_TOKEN:?ACCESS_TOKEN is required}
+      RUNNER_NAME: ${RUNNER_OWNER}-runner-1
+      RUNNER_SCOPE: org
+      ORG_NAME: ${RUNNER_OWNER:?RUNNER_OWNER is required}
+      LABELS: ${RUNNER_LABELS:-self-hosted,linux,retainer}
+      EPHEMERAL: "true"
+      DISABLE_AUTO_UPDATE: "false"
+    restart: unless-stopped
+
+  runner-2:
+    image: myoung34/github-runner:latest
+    environment:
+      ACCESS_TOKEN: ${ACCESS_TOKEN:?ACCESS_TOKEN is required}
+      RUNNER_NAME: ${RUNNER_OWNER}-runner-2
+      RUNNER_SCOPE: org
+      ORG_NAME: ${RUNNER_OWNER:?RUNNER_OWNER is required}
+      LABELS: ${RUNNER_LABELS:-self-hosted,linux,retainer}
+      EPHEMERAL: "true"
+      DISABLE_AUTO_UPDATE: "false"
+    restart: unless-stopped
