@@ -27,5 +27,6 @@ jobs:
     with:
       owner: leebaroneau
       mode: ${{ inputs.mode || 'both' }}
+      runner: '["ubuntu-latest"]'  # carve-out: no self-hosted runner pool deployed for this retainer
     secrets:
       FLEET_PAT: ${{ secrets.FLEET_PAT }}
