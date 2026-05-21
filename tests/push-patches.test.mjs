@@ -99,7 +99,7 @@ test("listConsumerRepos: missing config/repos.json throws with a clear message",
 });
 
 import { mkdtempSync as mkdir, writeFileSync as writef, mkdirSync as mkd } from "node:fs";
-import { planRefresh } from "../scripts/push-patches.mjs";
+import { planRefresh, renderCallerTemplate } from "../scripts/push-patches.mjs";
 
 function fakeTemplatesDir(files) {
   const dir = mkdir(join(tmpdir(), "tpl-"));
@@ -164,6 +164,37 @@ test("planRefresh: non-pipeline YAMLs in workflows/ are ignored", () => {
   assert.deepEqual(r.unchanged, ["pipeline-branch-name.yml"]);
   assert.deepEqual(r.removed,   []);
   assert.deepEqual(r.updated,   []);
+});
+
+test("renderCallerTemplate: pins Pipeline Core reusable workflow refs only", () => {
+  const body = [
+    "jobs:",
+    "  branch:",
+    "    uses: leebaroneau/pipeline-core/.github/workflows/pipeline-branch-name.yml@v1",
+    "  labels:",
+    "    uses: leebaroneau/pipeline-core/.github/workflows/pipeline-pr-labels.yaml@v1",
+    "  checkout:",
+    "    uses: actions/checkout@v4",
+    "  other:",
+    "    uses: other/pipeline-core/.github/workflows/pipeline-branch-name.yml@v1",
+    "",
+  ].join("\n");
+
+  assert.equal(
+    renderCallerTemplate(body, { callerRef: "v1.0.11" }),
+    [
+      "jobs:",
+      "  branch:",
+      "    uses: leebaroneau/pipeline-core/.github/workflows/pipeline-branch-name.yml@v1.0.11",
+      "  labels:",
+      "    uses: leebaroneau/pipeline-core/.github/workflows/pipeline-pr-labels.yaml@v1.0.11",
+      "  checkout:",
+      "    uses: actions/checkout@v4",
+      "  other:",
+      "    uses: other/pipeline-core/.github/workflows/pipeline-branch-name.yml@v1",
+      "",
+    ].join("\n"),
+  );
 });
 
 import { applyRefresh } from "../scripts/push-patches.mjs";
@@ -327,6 +358,63 @@ test("runPushPatches: inactive org is skipped", async () => {
   });
   assert.equal(summary.orgs.length, 0, "no org-level work for inactive orgs");
   assert.equal(summary.skippedOrgs.length, 1);
+});
+
+test("runPushPatches: includeInactive can dry-run one inactive org with explicit callerRef", async () => {
+  const orgsPath = withTempConfig({ orgs: [
+    {
+      name: "ALX-Finance",
+      retainer_status: "inactive",
+      patches_enabled: false,
+      pinned_version: "v1.0.11",
+      fleet_repo: "ALX-Finance/.github",
+    },
+  ]});
+  const tpl = fakeTemplatesDir({
+    "pipeline-branch-name.yml": [
+      "jobs:",
+      "  branch:",
+      "    uses: leebaroneau/pipeline-core/.github/workflows/pipeline-branch-name.yml@v1",
+      "",
+    ].join("\n"),
+  });
+  const consumerDir = fakeConsumer({
+    "pipeline-branch-name.yml": [
+      "jobs:",
+      "  branch:",
+      "    uses: leebaroneau/pipeline-core/.github/workflows/pipeline-branch-name.yml@v1",
+      "",
+    ].join("\n"),
+  });
+  const summary = await runPushPatches({
+    orgsConfigPath: orgsPath,
+    callerTemplatesDir: tpl,
+    includeInactive: true,
+    owners: ["ALX-Finance"],
+    callerRef: "v1.0.11",
+    dryRun: true,
+    token: "fake",
+    listConsumerRepos: async ({ owner }) => {
+      assert.equal(owner, "ALX-Finance");
+      return [{ owner: "ALX-Finance", name: "alx-site", branch: "main", tier: 1 }];
+    },
+    cloneConsumer: async () => consumerDir,
+  });
+
+  assert.equal(summary.orgs.length, 1);
+  assert.equal(summary.orgs[0].name, "ALX-Finance");
+  assert.equal(summary.orgs[0].repos[0].action, "dry-run");
+  assert.deepEqual(summary.orgs[0].repos[0].plan.updated, ["pipeline-branch-name.yml"]);
+  assert.equal(
+    readFileSync(join(consumerDir, ".github/workflows/pipeline-branch-name.yml"), "utf8"),
+    [
+      "jobs:",
+      "  branch:",
+      "    uses: leebaroneau/pipeline-core/.github/workflows/pipeline-branch-name.yml@v1",
+      "",
+    ].join("\n"),
+    "dry-run leaves inactive consumer untouched",
+  );
 });
 
 test("runPushPatches: --owner filter restricts to a single active org", async () => {

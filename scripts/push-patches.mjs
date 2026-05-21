@@ -10,7 +10,7 @@
 // workflow — it walks 5 orgs × N consumers and rate-limit hygiene + auth
 // scope warrant a human-in-the-loop trigger.
 
-import { existsSync, readFileSync as readF, readdirSync, mkdirSync, mkdtempSync, copyFileSync } from "node:fs";
+import { existsSync, readFileSync as readF, readdirSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { join, dirname, relative } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
@@ -46,8 +46,16 @@ export async function listConsumerRepos({ owner, fleetRepo, token, fetch = globa
 
 const PIPELINE_PREFIX = "pipeline-";
 const YAML_EXT = /\.(yml|yaml)$/;
+const DEFAULT_CALLER_REF = "v1";
+const PIPELINE_CORE_WORKFLOW_REF = /leebaroneau\/pipeline-core\/\.github\/workflows\/([^@\s'"]+\.ya?ml)@[^ \t\r\n'"]+/g;
 
-export function planRefresh({ repoDir, callerTemplatesDir }) {
+export function renderCallerTemplate(text, { callerRef = DEFAULT_CALLER_REF } = {}) {
+  return String(text).replace(PIPELINE_CORE_WORKFLOW_REF, (_match, workflow) => (
+    `leebaroneau/pipeline-core/.github/workflows/${workflow}@${callerRef}`
+  ));
+}
+
+export function planRefresh({ repoDir, callerTemplatesDir, callerRef = DEFAULT_CALLER_REF }) {
   const templates = readdirSync(callerTemplatesDir)
     .filter((f) => f.startsWith(PIPELINE_PREFIX) && YAML_EXT.test(f));
   const workflowsDir = join(repoDir, ".github", "workflows");
@@ -60,7 +68,7 @@ export function planRefresh({ repoDir, callerTemplatesDir }) {
   const added     = [];
 
   for (const name of templates) {
-    const tplBody = readF(join(callerTemplatesDir, name), "utf8");
+    const tplBody = renderCallerTemplate(readF(join(callerTemplatesDir, name), "utf8"), { callerRef });
     if (!existing.includes(name)) {
       added.push(name);
       continue;
@@ -79,13 +87,14 @@ export function planRefresh({ repoDir, callerTemplatesDir }) {
   return { unchanged, updated, added, removed };
 }
 
-export function applyRefresh({ plan, callerTemplatesDir, repoDir }) {
+export function applyRefresh({ plan, callerTemplatesDir, repoDir, callerRef = DEFAULT_CALLER_REF }) {
   const written = [];
   const toWrite = [...plan.added, ...plan.updated];
   for (const name of toWrite) {
     const dest = join(repoDir, ".github", "workflows", name);
     mkdirSync(dirname(dest), { recursive: true });
-    copyFileSync(join(callerTemplatesDir, name), dest);
+    const rendered = renderCallerTemplate(readF(join(callerTemplatesDir, name), "utf8"), { callerRef });
+    writeFileSync(dest, rendered);
     written.push(dest);
   }
   return written;
@@ -171,6 +180,8 @@ export async function runPushPatches({
   orgsConfigPath,
   callerTemplatesDir,
   owners,                  // optional: filter active orgs to this allowlist
+  includeInactive = false,
+  callerRef = DEFAULT_CALLER_REF,
   dryRun = false,
   newVersion = "v1",       // PR title/body label
   token = process.env.FLEET_PAT ?? process.env.GITHUB_TOKEN,
@@ -181,7 +192,31 @@ export async function runPushPatches({
 }) {
   if (!token) throw new Error("runPushPatches needs FLEET_PAT or GITHUB_TOKEN.");
   const registry = loadOrgRegistry(orgsConfigPath);
-  const filtered = patchTargets(registry, { owners });
+  const ownerFilters = owners ?? [];
+  let filtered;
+  if (includeInactive) {
+    if (ownerFilters.length !== 1) {
+      throw new Error("includeInactive handoff needs exactly one --owner filter.");
+    }
+    const owner = ownerFilters[0];
+    const invalidPinned = registry.invalid.find(
+      (row) => row.entry?.name === owner && /pinned_version/.test(row.reason),
+    );
+    if (invalidPinned && callerRef === DEFAULT_CALLER_REF) {
+      throw new Error(`includeInactive handoff for ${owner} needs --caller-ref because the org has no pinned_version.`);
+    }
+    const org = registry.orgs.find((entry) => entry.name === owner);
+    if (!org) {
+      throw new Error(`includeInactive handoff could not find normalized org ${owner}.`);
+    }
+    const effectiveCallerRef = callerRef === DEFAULT_CALLER_REF ? org.pinned_version : callerRef;
+    if (!effectiveCallerRef) {
+      throw new Error(`includeInactive handoff for ${owner} needs pinned_version or --caller-ref.`);
+    }
+    filtered = [{ ...org, callerRef: effectiveCallerRef }];
+  } else {
+    filtered = patchTargets(registry, { owners: ownerFilters }).map((org) => ({ ...org, callerRef }));
+  }
   const selected = new Set(filtered.map((org) => org.name));
   const skipped = registry.orgs.filter((org) => !selected.has(org.name));
 
@@ -192,7 +227,7 @@ export async function runPushPatches({
     for (const c of consumers) {
       const repoDir = await cloneFn({ owner: c.owner, name: c.name, branch: c.branch, token });
       try {
-        const plan = planRefresh({ repoDir, callerTemplatesDir });
+        const plan = planRefresh({ repoDir, callerTemplatesDir, callerRef: org.callerRef });
         const willWrite = plan.added.length + plan.updated.length;
         if (willWrite === 0) {
           repos.push({ slug: `${c.owner}/${c.name}`, plan, prUrl: null, action: "noop" });
@@ -204,7 +239,7 @@ export async function runPushPatches({
         }
         const branch = `chore/refresh-pipeline-core-${newVersion}`;
         preflightAutoPR({ repoDir, branch });
-        const written = applyRefresh({ plan, callerTemplatesDir, repoDir });
+        const written = applyRefresh({ plan, callerTemplatesDir, repoDir, callerRef: org.callerRef });
         const prUrl = openFn({ repoDir, branch, written, newVersion, plan });
         repos.push({ slug: `${c.owner}/${c.name}`, plan, prUrl, action: "pr-opened" });
       } catch (err) {
@@ -226,6 +261,8 @@ function parseArgs(argv) {
     else if (a === "--templates")   args.callerTemplatesDir = argv[++i];
     else if (a === "--owner")       args.owners.push(argv[++i]);
     else if (a === "--new-version") args.newVersion         = argv[++i];
+    else if (a === "--caller-ref")  args.callerRef          = argv[++i];
+    else if (a === "--include-inactive") args.includeInactive = true;
     else if (a === "--dry-run")     args.dryRun             = true;
     else if (a === "--help" || a === "-h") args.help        = true;
   }
@@ -244,6 +281,8 @@ Required:
 Options:
   --owner <name>               Restrict to one active org. Repeatable.
   --new-version <ref>          Label shown in PR title/body (default: v1)
+  --caller-ref <ref>           Pipeline Core reusable workflow ref (default: v1)
+  --include-inactive           One-time handoff pin for exactly one --owner
   --dry-run                    Plan only — no clones write back, no PRs open
   --help, -h                   Show this help
 
@@ -261,6 +300,8 @@ async function main() {
     orgsConfigPath:     args.orgsConfigPath,
     callerTemplatesDir: args.callerTemplatesDir,
     owners:             args.owners,
+    includeInactive:    args.includeInactive,
+    callerRef:          args.callerRef ?? DEFAULT_CALLER_REF,
     dryRun:             args.dryRun,
     newVersion:         args.newVersion ?? "v1",
     cloneConsumer,
