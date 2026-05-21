@@ -13,22 +13,23 @@ const DEFAULT_MODE = "both";
 const DEFAULT_ORGS_CONFIG_PATH = join(dirname(fileURLToPath(import.meta.url)), "..", "config", "orgs.json");
 const DEFAULT_GIT_USER_EMAIL = "41898282+github-actions[bot]@users.noreply.github.com";
 const DEFAULT_GIT_USER_NAME = "github-actions[bot]";
+const GIT_ASKPASS_PATH = join(dirname(fileURLToPath(import.meta.url)), "lib", "git-askpass.mjs");
 const SAFE_NPM_ENV_KEYS = new Set(["CI", "HOME", "LOGNAME", "NODE_ENV", "PATH", "SHELL", "TEMP", "TMP", "TMPDIR", "USER"]);
 const SECRET_ENV_KEY = /(TOKEN|SECRET|PASSWORD|AUTH|CREDENTIAL|PRIVATE_KEY|ACCESS_KEY|(^|_)PAT($|_))/i;
 const VALID_MODES = new Set(["doctor", "discover", "both"]);
-
-function gitHubTokenUrl(repo, token) {
-  return `https://x-access-token:${token}@github.com/${repo}.git`;
-}
 
 function publicGitHubUrl(repo) {
   return `https://github.com/${repo}.git`;
 }
 
-function pipelineCoreCloneUrl(env) {
-  return env.PIPELINE_CORE_TOKEN
-    ? gitHubTokenUrl("leebaroneau/pipeline-core", env.PIPELINE_CORE_TOKEN)
-    : publicGitHubUrl("leebaroneau/pipeline-core");
+function authenticatedGitEnv(env, token) {
+  return {
+    ...env,
+    GIT_ASKPASS: GIT_ASKPASS_PATH,
+    GIT_TERMINAL_PROMPT: "0",
+    GIT_AUTH_USERNAME: "x-access-token",
+    GIT_AUTH_TOKEN: token,
+  };
 }
 
 function sanitizedRuntimeEnv(env) {
@@ -150,7 +151,7 @@ function runPlannedCommand(runCommand, item, env) {
   });
 }
 
-function executeCommitIfChanged({ plan, runCommand, env }) {
+function executeCommitIfChanged({ plan, runCommand, env, token }) {
   const status = runCommand("git", ["-C", plan.fleet.dir, "status", "--porcelain", "--", "state", "README.md"], { env });
   if (!status.stdout?.trim()) {
     return { committed: false, pushed: false, reason: "no changes" };
@@ -160,7 +161,7 @@ function executeCommitIfChanged({ plan, runCommand, env }) {
   runCommand("git", ["-C", plan.fleet.dir, "config", "user.email", DEFAULT_GIT_USER_EMAIL], { env });
   runCommand("git", ["-C", plan.fleet.dir, "add", "state", "README.md"], { env });
   runCommand("git", ["-C", plan.fleet.dir, "commit", "-m", `chore: update ${plan.org} fleet state`], { env });
-  runCommand("git", ["-C", plan.fleet.dir, "push"], { env });
+  runCommand("git", ["-C", plan.fleet.dir, "push"], { env: authenticatedGitEnv(env, token) });
   return { committed: true, pushed: true, reason: "changes pushed" };
 }
 
@@ -204,8 +205,15 @@ export async function runFleetOnce({
     });
     lastPlan = plan;
 
-    runCommand("git", ["clone", gitHubTokenUrl(org.fleet_repo, token), plan.fleet.dir], { env });
-    runCommand("git", ["clone", pipelineCoreCloneUrl(env), plan.core.dir], { env: sanitizedRuntimeEnv(env) });
+    runCommand("git", ["clone", publicGitHubUrl(org.fleet_repo), plan.fleet.dir], {
+      env: authenticatedGitEnv(env, token),
+    });
+    const coreCloneEnv = env.PIPELINE_CORE_TOKEN
+      ? authenticatedGitEnv(sanitizedRuntimeEnv(env), env.PIPELINE_CORE_TOKEN)
+      : sanitizedRuntimeEnv(env);
+    runCommand("git", ["clone", publicGitHubUrl("leebaroneau/pipeline-core"), plan.core.dir], {
+      env: coreCloneEnv,
+    });
     runCommand("git", ["-C", plan.core.dir, "checkout", plan.core.ref], { env });
     runCommand("npm", ["ci"], { cwd: plan.core.dir, env: sanitizedRuntimeEnv(env) });
 
@@ -216,7 +224,7 @@ export async function runFleetOnce({
     }
 
     const git = commitChanges
-      ? executeCommitIfChanged({ plan, runCommand, env })
+      ? executeCommitIfChanged({ plan, runCommand, env, token })
       : { committed: false, pushed: false, reason: "commit disabled" };
 
     orgSummaries.push({

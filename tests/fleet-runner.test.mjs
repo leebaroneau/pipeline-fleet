@@ -14,6 +14,16 @@ function tempConfig(body) {
   return path;
 }
 
+function assertCloneArgsDoNotExposeSecrets(call, secrets) {
+  assert.equal(call.cmd, "git");
+  assert.equal(call.args[0], "clone");
+  const argv = call.args.join(" ");
+  assert.doesNotMatch(argv, /x-access-token:/);
+  for (const secret of secrets) {
+    assert.ok(!argv.includes(secret), `clone argv leaked ${secret}: ${argv}`);
+  }
+}
+
 test("planFleetRun pins pipeline-core clone to org pinned_version", () => {
   const plan = planFleetRun({
     org: {
@@ -118,7 +128,11 @@ test("runFleetOnce clones pipeline-core without retainer token and sanitizes npm
   const coreClone = cloneCalls.find((call) => call.args.some((arg) => arg.includes("leebaroneau/pipeline-core.git")));
   const npmCi = calls.find((call) => call.cmd === "npm" && call.args[0] === "ci");
 
-  assert.ok(fleetClone.args.some((arg) => arg.includes("fleet-secret")));
+  assertCloneArgsDoNotExposeSecrets(fleetClone, ["fleet-secret", "github-secret"]);
+  assert.equal(fleetClone.env.GIT_TERMINAL_PROMPT, "0");
+  assert.equal(fleetClone.env.GIT_AUTH_USERNAME, "x-access-token");
+  assert.equal(fleetClone.env.GIT_AUTH_TOKEN, "fleet-secret");
+  assert.ok(fleetClone.env.GIT_ASKPASS);
   assert.deepEqual(coreClone.args, [
     "clone",
     "https://github.com/leebaroneau/pipeline-core.git",
@@ -169,10 +183,20 @@ test("runFleetOnce keeps PIPELINE_CORE_TOKEN out of npm ci env when private core
     && call.args[0] === "clone"
     && call.args.some((arg) => arg.includes("leebaroneau/pipeline-core.git"))
   ));
+  const fleetClone = calls.find((call) => (
+    call.cmd === "git"
+    && call.args[0] === "clone"
+    && call.args.some((arg) => arg.includes("Haverford-Brands/.github.git"))
+  ));
   const npmCi = calls.find((call) => call.cmd === "npm" && call.args[0] === "ci");
 
-  assert.ok(coreClone.args.some((arg) => arg.includes("core-secret")));
-  assert.ok(!coreClone.args.some((arg) => arg.includes("fleet-secret")));
+  assertCloneArgsDoNotExposeSecrets(fleetClone, ["fleet-secret", "core-secret"]);
+  assertCloneArgsDoNotExposeSecrets(coreClone, ["fleet-secret", "core-secret"]);
+  assert.equal(fleetClone.env.GIT_AUTH_TOKEN, "fleet-secret");
+  assert.equal(coreClone.env.GIT_TERMINAL_PROMPT, "0");
+  assert.equal(coreClone.env.GIT_AUTH_USERNAME, "x-access-token");
+  assert.equal(coreClone.env.GIT_AUTH_TOKEN, "core-secret");
+  assert.ok(coreClone.env.GIT_ASKPASS);
   assert.equal(coreClone.env.FLEET_PAT, undefined);
   assert.equal(coreClone.env.PIPELINE_CORE_TOKEN, undefined);
   assert.equal(npmCi.env.PIPELINE_CORE_TOKEN, undefined);
@@ -217,7 +241,7 @@ test("runFleetOnce configures git identity before committing changed state", asy
     env: {
       ORGS_CONFIG_PATH: orgsConfigPath,
       FLEET_OWNER: "Haverford-Brands",
-      FLEET_PAT: "token",
+      FLEET_PAT: "fleet-secret",
       MODE: "doctor",
       COMMIT_CHANGES: "1",
       WORK_DIR: mkdtempSync(join(tmpdir(), "fleet-runner-commit-")),
@@ -236,6 +260,7 @@ test("runFleetOnce configures git identity before committing changed state", asy
   const nameIndex = gitArgs.findIndex((args) => args.includes("user.name"));
   const emailIndex = gitArgs.findIndex((args) => args.includes("user.email"));
   const commitIndex = gitArgs.findIndex((args) => args.includes("commit"));
+  const push = calls.find((call) => call.cmd === "git" && call.args.includes("push"));
 
   assert.equal(summary.orgs[0].git.committed, true);
   assert.ok(nameIndex >= 0, "configures user.name");
@@ -248,6 +273,13 @@ test("runFleetOnce configures git identity before committing changed state", asy
     "user.email",
     "41898282+github-actions[bot]@users.noreply.github.com",
   ]);
+  assert.ok(push);
+  assert.ok(!push.args.join(" ").includes("fleet-secret"), `git push argv leaked token: ${push.args.join(" ")}`);
+  assert.doesNotMatch(push.args.join(" "), /x-access-token:/);
+  assert.equal(push.env.GIT_TERMINAL_PROMPT, "0");
+  assert.equal(push.env.GIT_AUTH_USERNAME, "x-access-token");
+  assert.equal(push.env.GIT_AUTH_TOKEN, "fleet-secret");
+  assert.ok(push.env.GIT_ASKPASS);
 });
 
 test("runFleetOnce skips git config and commit when scoped state is unchanged", async () => {
