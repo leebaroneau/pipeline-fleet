@@ -46,10 +46,10 @@ Defaults and optional values:
 
 ## Manual Test
 
-Run the one-shot runner locally without committing changes:
+Run the one-shot runner locally without committing changes. Set the owner and token in the command so the example is executable as written:
 
 ```bash
-npm run fleet:dry-run
+FLEET_OWNER=Haverford-Brands FLEET_PAT="$(gh auth token)" npm run fleet:dry-run
 ```
 
 This sets `COMMIT_CHANGES=0` and runs `node scripts/fleet-runner.mjs --once`.
@@ -71,11 +71,10 @@ Before handing a retainer-hosted runner over:
 
 When a retainer leaves support:
 
-1. Stop scheduling and pushing the Coolify runner for that retainer.
-2. In `config/orgs.json`, set the retainer to inactive.
-3. Set `patches_enabled` to `false`.
-4. Set `pinned_version` to the exact supported Pipeline Core release, for example `v1.0.X`.
-5. Open one-time caller pin PRs so consumer repos stop floating on `@v1`:
+1. Always stop Lee-side updates in `config/orgs.json`: set `retainer_status` to `inactive`, set `patches_enabled` to `false`, and set `pinned_version` to the exact supported Pipeline Core release, for example `v1.0.X`.
+2. If support or runtime should stop entirely, or Lee must prevent this org from being selected by future runner invocations, set `runner_enabled` to `false` and stop or remove the Coolify schedule.
+3. If the retainer keeps self-hosted monitoring after handoff, `runner_enabled` may remain `true`, but `PIPELINE_CORE_REF` and consumer callers must be pinned to `v1.0.X`. Lee no longer pushes fresh template updates.
+4. Open one-time caller pin PRs so consumer repos stop floating on `@v1`:
 
 ```bash
 node scripts/push-patches.mjs \
