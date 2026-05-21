@@ -10,36 +10,19 @@
 // workflow — it walks 5 orgs × N consumers and rate-limit hygiene + auth
 // scope warrant a human-in-the-loop trigger.
 
-import { readFileSync, existsSync, readFileSync as readF, readdirSync, writeFileSync, mkdirSync, mkdtempSync, copyFileSync } from "node:fs";
+import { existsSync, readFileSync as readF, readdirSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { join, dirname, relative } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
-
-const ACTIVE_STATUSES = new Set(["self", "active"]);
-const KNOWN_STATUSES = new Set(["self", "active", "inactive"]);
+import { fileURLToPath } from "node:url";
+import { loadOrgRegistry, patchTargets } from "./lib/orgs-config.mjs";
 
 export function loadOrgs(configPath) {
-  const raw = JSON.parse(readFileSync(configPath, "utf8"));
-  const entries = Array.isArray(raw) ? raw : raw.orgs ?? [];
-  const active = [];
-  const skipped = [];
-  const invalid = [];
-  for (const e of entries) {
-    if (!e.name) {
-      invalid.push({ entry: e, reason: "missing name" });
-      continue;
-    }
-    if (!KNOWN_STATUSES.has(e.retainer_status)) {
-      invalid.push({ entry: e, reason: `unknown retainer_status: ${e.retainer_status}` });
-      continue;
-    }
-    if (ACTIVE_STATUSES.has(e.retainer_status)) {
-      active.push(e);
-    } else {
-      skipped.push(e);
-    }
-  }
-  return { active, skipped, invalid };
+  const registry = loadOrgRegistry(configPath);
+  const active = patchTargets(registry);
+  const selected = new Set(active.map((org) => org.name));
+  const skipped = registry.orgs.filter((org) => !selected.has(org.name));
+  return { active, skipped, invalid: registry.invalid };
 }
 
 export async function listConsumerRepos({ owner, fleetRepo, token, fetch = globalThis.fetch }) {
@@ -64,8 +47,17 @@ export async function listConsumerRepos({ owner, fleetRepo, token, fetch = globa
 
 const PIPELINE_PREFIX = "pipeline-";
 const YAML_EXT = /\.(yml|yaml)$/;
+const DEFAULT_CALLER_REF = "v1";
+const PIPELINE_CORE_WORKFLOW_REF = /leebaroneau\/pipeline-core\/\.github\/workflows\/([^@\s'"]+\.ya?ml)@[^ \t\r\n'"]+/g;
+const GIT_ASKPASS_PATH = join(dirname(fileURLToPath(import.meta.url)), "lib", "git-askpass.mjs");
 
-export function planRefresh({ repoDir, callerTemplatesDir }) {
+export function renderCallerTemplate(text, { callerRef = DEFAULT_CALLER_REF } = {}) {
+  return String(text).replace(PIPELINE_CORE_WORKFLOW_REF, (_match, workflow) => (
+    `leebaroneau/pipeline-core/.github/workflows/${workflow}@${callerRef}`
+  ));
+}
+
+export function planRefresh({ repoDir, callerTemplatesDir, callerRef = DEFAULT_CALLER_REF }) {
   const templates = readdirSync(callerTemplatesDir)
     .filter((f) => f.startsWith(PIPELINE_PREFIX) && YAML_EXT.test(f));
   const workflowsDir = join(repoDir, ".github", "workflows");
@@ -78,7 +70,7 @@ export function planRefresh({ repoDir, callerTemplatesDir }) {
   const added     = [];
 
   for (const name of templates) {
-    const tplBody = readF(join(callerTemplatesDir, name), "utf8");
+    const tplBody = renderCallerTemplate(readF(join(callerTemplatesDir, name), "utf8"), { callerRef });
     if (!existing.includes(name)) {
       added.push(name);
       continue;
@@ -97,13 +89,14 @@ export function planRefresh({ repoDir, callerTemplatesDir }) {
   return { unchanged, updated, added, removed };
 }
 
-export function applyRefresh({ plan, callerTemplatesDir, repoDir }) {
+export function applyRefresh({ plan, callerTemplatesDir, repoDir, callerRef = DEFAULT_CALLER_REF }) {
   const written = [];
   const toWrite = [...plan.added, ...plan.updated];
   for (const name of toWrite) {
     const dest = join(repoDir, ".github", "workflows", name);
     mkdirSync(dirname(dest), { recursive: true });
-    copyFileSync(join(callerTemplatesDir, name), dest);
+    const rendered = renderCallerTemplate(readF(join(callerTemplatesDir, name), "utf8"), { callerRef });
+    writeFileSync(dest, rendered);
     written.push(dest);
   }
   return written;
@@ -114,6 +107,16 @@ export function applyRefresh({ plan, callerTemplatesDir, repoDir }) {
 // and any subsequent error message. Mirrors the helper in fleet-doctor.mjs.
 export function redactToken(s) {
   return String(s ?? "").replace(/x-access-token:[^@\s]+@/g, "x-access-token:***@");
+}
+
+function authenticatedGitEnv(token) {
+  return {
+    ...process.env,
+    GIT_ASKPASS: GIT_ASKPASS_PATH,
+    GIT_TERMINAL_PROMPT: "0",
+    GIT_AUTH_USERNAME: "x-access-token",
+    GIT_AUTH_TOKEN: token,
+  };
 }
 
 function run(cmd, args, opts = {}) {
@@ -143,10 +146,11 @@ export function preflightAutoPR({ repoDir, branch }) {
   }
 }
 
-export async function cloneConsumer({ owner, name, branch = "main", token, urlOverride }) {
+export async function cloneConsumer({ owner, name, branch = "main", token, urlOverride, runCommand = run }) {
   const dir = mkdtempSync(join(tmpdir(), `push-patches-${name}-`));
-  const url = urlOverride ?? `https://x-access-token:${token}@github.com/${owner}/${name}.git`;
-  run("git", ["clone", "--depth", "1", "--single-branch", "--branch", branch, url, dir]);
+  const url = urlOverride ?? `https://github.com/${owner}/${name}.git`;
+  const options = urlOverride ? undefined : { env: authenticatedGitEnv(token) };
+  runCommand("git", ["clone", "--depth", "1", "--single-branch", "--branch", branch, url, dir], options);
   return dir;
 }
 
@@ -154,9 +158,9 @@ function relativizePath(repoDir, absPath) {
   return relative(repoDir, absPath) || absPath;
 }
 
-export function openRefreshPR({ repoDir, branch, written, newVersion, plan }) {
-  run("git", ["-C", repoDir, "checkout", "-b", branch]);
-  run("git", ["-C", repoDir, "add", ...written.map((p) => relativizePath(repoDir, p))]);
+export function openRefreshPR({ repoDir, branch, written, newVersion, plan, token, runCommand = run }) {
+  runCommand("git", ["-C", repoDir, "checkout", "-b", branch]);
+  runCommand("git", ["-C", repoDir, "add", ...written.map((p) => relativizePath(repoDir, p))]);
   const summary = [
     plan.added.length    ? `add: ${plan.added.join(", ")}` : null,
     plan.updated.length  ? `update: ${plan.updated.join(", ")}` : null,
@@ -174,23 +178,25 @@ export function openRefreshPR({ repoDir, branch, written, newVersion, plan }) {
     ``,
     `Generated by \`pipeline-fleet/scripts/push-patches.mjs\`.`,
   ].filter(Boolean).join("\n");
-  run("git", ["-C", repoDir, "commit", "-m", `${title}\n\n${summary}`]);
-  run("git", ["-C", repoDir, "push", "-u", "origin", branch]);
+  runCommand("git", ["-C", repoDir, "commit", "-m", `${title}\n\n${summary}`]);
+  runCommand("git", ["-C", repoDir, "push", "-u", "origin", branch], { env: authenticatedGitEnv(token) });
   try {
-    run("gh", ["pr", "create", "--head", branch, "--title", title, "--body", body], { cwd: repoDir });
+    runCommand("gh", ["pr", "create", "--head", branch, "--title", title, "--body", body], { cwd: repoDir });
   } catch (err) {
     process.stderr.write(`Branch pushed, but \`gh pr create\` failed: ${redactToken(err.message)}\n`);
     return null;
   }
-  return run("gh", ["pr", "view", "--json", "url", "--jq", ".url"], { cwd: repoDir }).stdout.trim();
+  return runCommand("gh", ["pr", "view", "--json", "url", "--jq", ".url"], { cwd: repoDir }).stdout.trim();
 }
 
 export async function runPushPatches({
   orgsConfigPath,
   callerTemplatesDir,
   owners,                  // optional: filter active orgs to this allowlist
+  includeInactive = false,
+  callerRef,
   dryRun = false,
-  newVersion = "v1",       // PR title/body label
+  newVersion,              // PR title/body label
   token = process.env.FLEET_PAT ?? process.env.GITHUB_TOKEN,
   // Injected dependencies (defaults are real):
   listConsumerRepos: listFn = listConsumerRepos,
@@ -198,10 +204,55 @@ export async function runPushPatches({
   openPR: openFn = openRefreshPR,
 }) {
   if (!token) throw new Error("runPushPatches needs FLEET_PAT or GITHUB_TOKEN.");
-  const { active, skipped, invalid } = loadOrgs(orgsConfigPath);
-  const filtered = owners?.length
-    ? active.filter((o) => owners.includes(o.name))
-    : active;
+  const registry = loadOrgRegistry(orgsConfigPath);
+  const ownerFilters = owners ?? [];
+  const callerRefExplicit = callerRef !== undefined;
+  const requestedCallerRef = callerRef ?? DEFAULT_CALLER_REF;
+  let filtered;
+  if (includeInactive) {
+    if (ownerFilters.length !== 1) {
+      throw new Error("includeInactive handoff needs exactly one --owner filter.");
+    }
+    const owner = ownerFilters[0];
+    const invalidPinned = registry.invalid.find(
+      (row) => row.entry?.name === owner && /pinned_version/.test(row.reason),
+    );
+    if (invalidPinned && !callerRefExplicit) {
+      throw new Error(`includeInactive handoff for ${owner} needs --caller-ref because the org has no pinned_version.`);
+    }
+    let org = registry.orgs.find((entry) => entry.name === owner);
+    if (!org && invalidPinned && callerRefExplicit) {
+      org = {
+        name: invalidPinned.entry.name,
+        retainer_status: "inactive",
+        deployment_mode: invalidPinned.entry.deployment_mode ?? "retainer-coolify",
+        runner_enabled: invalidPinned.entry.runner_enabled ?? true,
+        patches_enabled: false,
+        pinned_version: null,
+        fleet_repo: invalidPinned.entry.fleet_repo,
+        notes: invalidPinned.entry.notes ?? "",
+      };
+    }
+    if (!org) {
+      throw new Error(`includeInactive handoff could not find normalized org ${owner}.`);
+    }
+    if (org.retainer_status !== "inactive") {
+      throw new Error(`includeInactive handoff only supports inactive orgs; ${owner} is ${org.retainer_status}.`);
+    }
+    const effectiveCallerRef = callerRefExplicit ? requestedCallerRef : org.pinned_version;
+    if (!effectiveCallerRef) {
+      throw new Error(`includeInactive handoff for ${owner} needs pinned_version or --caller-ref.`);
+    }
+    filtered = [{ ...org, callerRef: effectiveCallerRef, newVersion: newVersion ?? effectiveCallerRef }];
+  } else {
+    filtered = patchTargets(registry, { owners: ownerFilters }).map((org) => ({
+      ...org,
+      callerRef: requestedCallerRef,
+      newVersion: newVersion ?? requestedCallerRef,
+    }));
+  }
+  const selected = new Set(filtered.map((org) => org.name));
+  const skipped = registry.orgs.filter((org) => !selected.has(org.name));
 
   const orgsOut = [];
   for (const org of filtered) {
@@ -210,7 +261,7 @@ export async function runPushPatches({
     for (const c of consumers) {
       const repoDir = await cloneFn({ owner: c.owner, name: c.name, branch: c.branch, token });
       try {
-        const plan = planRefresh({ repoDir, callerTemplatesDir });
+        const plan = planRefresh({ repoDir, callerTemplatesDir, callerRef: org.callerRef });
         const willWrite = plan.added.length + plan.updated.length;
         if (willWrite === 0) {
           repos.push({ slug: `${c.owner}/${c.name}`, plan, prUrl: null, action: "noop" });
@@ -220,10 +271,10 @@ export async function runPushPatches({
           repos.push({ slug: `${c.owner}/${c.name}`, plan, prUrl: null, action: "dry-run" });
           continue;
         }
-        const branch = `chore/refresh-pipeline-core-${newVersion}`;
+        const branch = `chore/refresh-pipeline-core-${org.newVersion}`;
         preflightAutoPR({ repoDir, branch });
-        const written = applyRefresh({ plan, callerTemplatesDir, repoDir });
-        const prUrl = openFn({ repoDir, branch, written, newVersion, plan });
+        const written = applyRefresh({ plan, callerTemplatesDir, repoDir, callerRef: org.callerRef });
+        const prUrl = openFn({ repoDir, branch, written, newVersion: org.newVersion, plan, token });
         repos.push({ slug: `${c.owner}/${c.name}`, plan, prUrl, action: "pr-opened" });
       } catch (err) {
         repos.push({ slug: `${c.owner}/${c.name}`, plan: null, prUrl: null, action: "error", error: redactToken(err.message) });
@@ -231,7 +282,7 @@ export async function runPushPatches({
     }
     orgsOut.push({ name: org.name, fleet_repo: org.fleet_repo, repos });
   }
-  return { orgs: orgsOut, skippedOrgs: skipped, invalidOrgs: invalid };
+  return { orgs: orgsOut, skippedOrgs: skipped, invalidOrgs: registry.invalid };
 }
 
 // ─── CLI ────────────────────────────────────────────────────────────────────
@@ -244,6 +295,8 @@ function parseArgs(argv) {
     else if (a === "--templates")   args.callerTemplatesDir = argv[++i];
     else if (a === "--owner")       args.owners.push(argv[++i]);
     else if (a === "--new-version") args.newVersion         = argv[++i];
+    else if (a === "--caller-ref")  args.callerRef          = argv[++i];
+    else if (a === "--include-inactive") args.includeInactive = true;
     else if (a === "--dry-run")     args.dryRun             = true;
     else if (a === "--help" || a === "-h") args.help        = true;
   }
@@ -262,6 +315,8 @@ Required:
 Options:
   --owner <name>               Restrict to one active org. Repeatable.
   --new-version <ref>          Label shown in PR title/body (default: v1)
+  --caller-ref <ref>           Pipeline Core reusable workflow ref (default: v1)
+  --include-inactive           One-time handoff pin for exactly one --owner
   --dry-run                    Plan only — no clones write back, no PRs open
   --help, -h                   Show this help
 
@@ -279,8 +334,10 @@ async function main() {
     orgsConfigPath:     args.orgsConfigPath,
     callerTemplatesDir: args.callerTemplatesDir,
     owners:             args.owners,
+    includeInactive:    args.includeInactive,
+    callerRef:          args.callerRef,
     dryRun:             args.dryRun,
-    newVersion:         args.newVersion ?? "v1",
+    newVersion:         args.newVersion,
     cloneConsumer,
   });
   // Concise stdout summary

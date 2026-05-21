@@ -7,6 +7,8 @@
     "node": ">=22"
   },
   "scripts": {
+    "fleet:run": "node scripts/fleet-runner.mjs --once",
+    "fleet:dry-run": "COMMIT_CHANGES=0 node scripts/fleet-runner.mjs --once",
     "test": "node --test 'tests/**/*.test.mjs'"
   }
 }
