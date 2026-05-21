@@ -317,6 +317,93 @@ test("cloneConsumer: shallow-clones the remote, returns the dir, .github/workflo
   assert.ok(existsSync(join(dir, ".github/workflows/pipeline-branch-name.yml")));
 });
 
+test("cloneConsumer: does not build token-bearing GitHub clone argv", () => {
+  assert.doesNotMatch(cloneConsumer.toString(), /x-access-token:\$\{token\}@/);
+  assert.doesNotMatch(cloneConsumer.toString(), /git clone https:\/\/x-access-token:/);
+});
+
+test("cloneConsumer: authenticated GitHub clone uses askpass env without token-bearing argv", async () => {
+  const calls = [];
+
+  await cloneConsumer({
+    owner: "Haverford-Brands",
+    name: "private-repo",
+    branch: "main",
+    token: "fleet-secret",
+    runCommand: (cmd, args, opts) => {
+      calls.push({ cmd, args, env: opts?.env });
+      return { status: 0, stdout: "", stderr: "" };
+    },
+  });
+
+  const clone = calls.find((call) => call.cmd === "git" && call.args[0] === "clone");
+  assert.ok(clone);
+  const argv = clone.args.join(" ");
+  assert.ok(!argv.includes("fleet-secret"), `git clone argv leaked token: ${argv}`);
+  assert.doesNotMatch(argv, /x-access-token:/);
+  assert.ok(clone.args.includes("https://github.com/Haverford-Brands/private-repo.git"));
+  assert.equal(clone.env.GIT_TERMINAL_PROMPT, "0");
+  assert.equal(clone.env.GIT_AUTH_USERNAME, "x-access-token");
+  assert.equal(clone.env.GIT_AUTH_TOKEN, "fleet-secret");
+  assert.ok(clone.env.GIT_ASKPASS);
+});
+
+test("cloneConsumer: urlOverride does not require askpass auth env", async () => {
+  const calls = [];
+
+  await cloneConsumer({
+    owner: "x",
+    name: "y",
+    branch: "main",
+    token: "fleet-secret",
+    urlOverride: "file:///tmp/local.git",
+    runCommand: (cmd, args, opts) => {
+      calls.push({ cmd, args, env: opts?.env });
+      return { status: 0, stdout: "", stderr: "" };
+    },
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].env, undefined);
+  assert.ok(calls[0].args.includes("file:///tmp/local.git"));
+});
+
+import { openRefreshPR } from "../scripts/push-patches.mjs";
+
+test("openRefreshPR: does not push with unauthenticated git env", () => {
+  assert.doesNotMatch(
+    openRefreshPR.toString(),
+    /run\("git", \["-C", repoDir, "push", "-u", "origin", branch\]\)/,
+  );
+});
+
+test("openRefreshPR: git push uses askpass env without token-bearing argv", () => {
+  const calls = [];
+
+  openRefreshPR({
+    repoDir: "/tmp/private-repo",
+    branch: "chore/refresh-pipeline-core-v1",
+    written: ["/tmp/private-repo/.github/workflows/pipeline-doctor.yml"],
+    newVersion: "v1",
+    token: "fleet-secret",
+    plan: { added: ["pipeline-doctor.yml"], updated: [], removed: [] },
+    runCommand: (cmd, args, opts) => {
+      calls.push({ cmd, args, cwd: opts?.cwd, env: opts?.env });
+      return { status: 0, stdout: "https://example.com/pr/1\n", stderr: "" };
+    },
+  });
+
+  const push = calls.find((call) => call.cmd === "git" && call.args.includes("push"));
+  assert.ok(push);
+  const argv = push.args.join(" ");
+  assert.ok(!argv.includes("fleet-secret"), `git push argv leaked token: ${argv}`);
+  assert.doesNotMatch(argv, /x-access-token:/);
+  assert.equal(push.env.GIT_TERMINAL_PROMPT, "0");
+  assert.equal(push.env.GIT_AUTH_USERNAME, "x-access-token");
+  assert.equal(push.env.GIT_AUTH_TOKEN, "fleet-secret");
+  assert.ok(push.env.GIT_ASKPASS);
+});
+
 import { runPushPatches } from "../scripts/push-patches.mjs";
 
 test("runPushPatches --dry-run: returns plan without mutating filesystem or opening PRs", async () => {
