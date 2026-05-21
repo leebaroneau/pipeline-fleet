@@ -82,6 +82,102 @@ test("runFleetOnce selects exactly FLEET_OWNER and uses pinned core ref", async 
   assert.ok(!calls.some((call) => call.args.some((arg) => arg.includes("discover.mjs"))));
 });
 
+test("runFleetOnce clones pipeline-core without retainer token and sanitizes npm ci env", async () => {
+  const orgsConfigPath = tempConfig({
+    orgs: [{
+      name: "Haverford-Brands",
+      retainer_status: "active",
+      fleet_repo: "Haverford-Brands/.github",
+    }],
+  });
+  const calls = [];
+
+  await runFleetOnce({
+    env: {
+      ORGS_CONFIG_PATH: orgsConfigPath,
+      FLEET_OWNER: "Haverford-Brands",
+      FLEET_PAT: "fleet-secret",
+      GITHUB_TOKEN: "github-secret",
+      MODE: "doctor",
+      COMMIT_CHANGES: "0",
+      WORK_DIR: mkdtempSync(join(tmpdir(), "fleet-runner-tokens-")),
+      QUIET: "1",
+      PATH: "/usr/bin",
+      HOME: "/tmp/home",
+      npm_config_cache: "/tmp/npm-cache",
+      SOME_API_TOKEN: "other-secret",
+    },
+    runCommand: (cmd, args, options) => {
+      calls.push({ cmd, args, cwd: options?.cwd, env: options?.env });
+      return { status: 0, stdout: "", stderr: "" };
+    },
+  });
+
+  const cloneCalls = calls.filter((call) => call.cmd === "git" && call.args[0] === "clone");
+  const fleetClone = cloneCalls.find((call) => call.args.some((arg) => arg.includes("Haverford-Brands/.github.git")));
+  const coreClone = cloneCalls.find((call) => call.args.some((arg) => arg.includes("leebaroneau/pipeline-core.git")));
+  const npmCi = calls.find((call) => call.cmd === "npm" && call.args[0] === "ci");
+
+  assert.ok(fleetClone.args.some((arg) => arg.includes("fleet-secret")));
+  assert.deepEqual(coreClone.args, [
+    "clone",
+    "https://github.com/leebaroneau/pipeline-core.git",
+    coreClone.args[2],
+  ]);
+  assert.equal(coreClone.env.FLEET_PAT, undefined);
+  assert.equal(coreClone.env.GITHUB_TOKEN, undefined);
+  assert.equal(npmCi.env.PATH, "/usr/bin");
+  assert.equal(npmCi.env.HOME, "/tmp/home");
+  assert.equal(npmCi.env.npm_config_cache, "/tmp/npm-cache");
+  assert.equal(npmCi.env.FLEET_PAT, undefined);
+  assert.equal(npmCi.env.GITHUB_TOKEN, undefined);
+  assert.equal(npmCi.env.PIPELINE_CORE_TOKEN, undefined);
+  assert.equal(npmCi.env.SOME_API_TOKEN, undefined);
+});
+
+test("runFleetOnce keeps PIPELINE_CORE_TOKEN out of npm ci env when private core clone is requested", async () => {
+  const orgsConfigPath = tempConfig({
+    orgs: [{
+      name: "Haverford-Brands",
+      retainer_status: "active",
+      fleet_repo: "Haverford-Brands/.github",
+    }],
+  });
+  const calls = [];
+
+  await runFleetOnce({
+    env: {
+      ORGS_CONFIG_PATH: orgsConfigPath,
+      FLEET_OWNER: "Haverford-Brands",
+      FLEET_PAT: "fleet-secret",
+      PIPELINE_CORE_TOKEN: "core-secret",
+      MODE: "doctor",
+      COMMIT_CHANGES: "0",
+      WORK_DIR: mkdtempSync(join(tmpdir(), "fleet-runner-core-token-")),
+      QUIET: "1",
+      PATH: "/usr/bin",
+      HOME: "/tmp/home",
+    },
+    runCommand: (cmd, args, options) => {
+      calls.push({ cmd, args, cwd: options?.cwd, env: options?.env });
+      return { status: 0, stdout: "", stderr: "" };
+    },
+  });
+
+  const coreClone = calls.find((call) => (
+    call.cmd === "git"
+    && call.args[0] === "clone"
+    && call.args.some((arg) => arg.includes("leebaroneau/pipeline-core.git"))
+  ));
+  const npmCi = calls.find((call) => call.cmd === "npm" && call.args[0] === "ci");
+
+  assert.ok(coreClone.args.some((arg) => arg.includes("core-secret")));
+  assert.ok(!coreClone.args.some((arg) => arg.includes("fleet-secret")));
+  assert.equal(coreClone.env.FLEET_PAT, undefined);
+  assert.equal(coreClone.env.PIPELINE_CORE_TOKEN, undefined);
+  assert.equal(npmCi.env.PIPELINE_CORE_TOKEN, undefined);
+});
+
 test("planFleetRun orders both mode as doctor, discover, update-tracker", () => {
   const plan = planFleetRun({
     org: {
@@ -196,4 +292,32 @@ test("runCommand reports spawn failures clearly", () => {
     () => runCommand("__pipeline_fleet_missing_binary__", []),
     /failed to start.*ENOENT/i,
   );
+});
+
+test("runCommand redacts explicit token env values from thrown errors", () => {
+  let err;
+  try {
+    runCommand(
+      process.execPath,
+      ["-e", "console.log(process.env.FLEET_PAT); console.error(process.env.GITHUB_TOKEN); process.exit(7)"],
+      {
+        env: {
+          PATH: process.env.PATH,
+          FLEET_PAT: "fleet-secret",
+          GITHUB_TOKEN: "github-secret",
+          PIPELINE_CORE_TOKEN: "core-secret",
+        },
+      },
+    );
+  } catch (caught) {
+    err = caught;
+  }
+
+  assert.ok(err);
+  assert.match(err.message, /\*\*\*/);
+  assert.match(err.stdout, /\*\*\*/);
+  assert.match(err.stderr, /\*\*\*/);
+  assert.doesNotMatch(err.message, /fleet-secret|github-secret|core-secret/);
+  assert.doesNotMatch(err.stdout, /fleet-secret|github-secret|core-secret/);
+  assert.doesNotMatch(err.stderr, /fleet-secret|github-secret|core-secret/);
 });

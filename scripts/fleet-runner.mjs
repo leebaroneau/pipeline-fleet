@@ -13,6 +13,8 @@ const DEFAULT_MODE = "both";
 const DEFAULT_ORGS_CONFIG_PATH = join(dirname(fileURLToPath(import.meta.url)), "..", "config", "orgs.json");
 const DEFAULT_GIT_USER_EMAIL = "41898282+github-actions[bot]@users.noreply.github.com";
 const DEFAULT_GIT_USER_NAME = "github-actions[bot]";
+const SAFE_NPM_ENV_KEYS = new Set(["CI", "HOME", "LOGNAME", "NODE_ENV", "PATH", "SHELL", "TEMP", "TMP", "TMPDIR", "USER"]);
+const SECRET_ENV_KEY = /(TOKEN|SECRET|PASSWORD|AUTH|CREDENTIAL|PRIVATE_KEY|ACCESS_KEY|(^|_)PAT($|_))/i;
 const VALID_MODES = new Set(["doctor", "discover", "both"]);
 
 function gitHubTokenUrl(repo, token) {
@@ -21,6 +23,23 @@ function gitHubTokenUrl(repo, token) {
 
 function publicGitHubUrl(repo) {
   return `https://github.com/${repo}.git`;
+}
+
+function pipelineCoreCloneUrl(env) {
+  return env.PIPELINE_CORE_TOKEN
+    ? gitHubTokenUrl("leebaroneau/pipeline-core", env.PIPELINE_CORE_TOKEN)
+    : publicGitHubUrl("leebaroneau/pipeline-core");
+}
+
+function sanitizedRuntimeEnv(env) {
+  const next = {};
+  for (const [key, value] of Object.entries(env)) {
+    if (value === undefined || SECRET_ENV_KEY.test(key)) continue;
+    if (SAFE_NPM_ENV_KEYS.has(key) || /^npm_config_/i.test(key)) {
+      next[key] = value;
+    }
+  }
+  return next;
 }
 
 function boolEnv(value, fallback = false) {
@@ -186,9 +205,9 @@ export async function runFleetOnce({
     lastPlan = plan;
 
     runCommand("git", ["clone", gitHubTokenUrl(org.fleet_repo, token), plan.fleet.dir], { env });
-    runCommand("git", ["clone", gitHubTokenUrl(plan.core.repo, token), plan.core.dir], { env });
+    runCommand("git", ["clone", pipelineCoreCloneUrl(env), plan.core.dir], { env: sanitizedRuntimeEnv(env) });
     runCommand("git", ["-C", plan.core.dir, "checkout", plan.core.ref], { env });
-    runCommand("npm", ["ci"], { cwd: plan.core.dir, env });
+    runCommand("npm", ["ci"], { cwd: plan.core.dir, env: sanitizedRuntimeEnv(env) });
 
     for (const item of plan.commands) {
       if (["fleet:clone", "core:clone", "core:checkout", "core:npm-ci"].includes(item.name)) continue;
