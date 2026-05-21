@@ -183,7 +183,7 @@ export async function runPushPatches({
   includeInactive = false,
   callerRef = DEFAULT_CALLER_REF,
   dryRun = false,
-  newVersion = "v1",       // PR title/body label
+  newVersion,              // PR title/body label
   token = process.env.FLEET_PAT ?? process.env.GITHUB_TOKEN,
   // Injected dependencies (defaults are real):
   listConsumerRepos: listFn = listConsumerRepos,
@@ -209,13 +209,20 @@ export async function runPushPatches({
     if (!org) {
       throw new Error(`includeInactive handoff could not find normalized org ${owner}.`);
     }
+    if (org.retainer_status !== "inactive") {
+      throw new Error(`includeInactive handoff only supports inactive orgs; ${owner} is ${org.retainer_status}.`);
+    }
     const effectiveCallerRef = callerRef === DEFAULT_CALLER_REF ? org.pinned_version : callerRef;
     if (!effectiveCallerRef) {
       throw new Error(`includeInactive handoff for ${owner} needs pinned_version or --caller-ref.`);
     }
-    filtered = [{ ...org, callerRef: effectiveCallerRef }];
+    filtered = [{ ...org, callerRef: effectiveCallerRef, newVersion: newVersion ?? effectiveCallerRef }];
   } else {
-    filtered = patchTargets(registry, { owners: ownerFilters }).map((org) => ({ ...org, callerRef }));
+    filtered = patchTargets(registry, { owners: ownerFilters }).map((org) => ({
+      ...org,
+      callerRef,
+      newVersion: newVersion ?? callerRef,
+    }));
   }
   const selected = new Set(filtered.map((org) => org.name));
   const skipped = registry.orgs.filter((org) => !selected.has(org.name));
@@ -237,10 +244,10 @@ export async function runPushPatches({
           repos.push({ slug: `${c.owner}/${c.name}`, plan, prUrl: null, action: "dry-run" });
           continue;
         }
-        const branch = `chore/refresh-pipeline-core-${newVersion}`;
+        const branch = `chore/refresh-pipeline-core-${org.newVersion}`;
         preflightAutoPR({ repoDir, branch });
         const written = applyRefresh({ plan, callerTemplatesDir, repoDir, callerRef: org.callerRef });
-        const prUrl = openFn({ repoDir, branch, written, newVersion, plan });
+        const prUrl = openFn({ repoDir, branch, written, newVersion: org.newVersion, plan });
         repos.push({ slug: `${c.owner}/${c.name}`, plan, prUrl, action: "pr-opened" });
       } catch (err) {
         repos.push({ slug: `${c.owner}/${c.name}`, plan: null, prUrl: null, action: "error", error: redactToken(err.message) });
@@ -303,7 +310,7 @@ async function main() {
     includeInactive:    args.includeInactive,
     callerRef:          args.callerRef ?? DEFAULT_CALLER_REF,
     dryRun:             args.dryRun,
-    newVersion:         args.newVersion ?? "v1",
+    newVersion:         args.newVersion,
     cloneConsumer,
   });
   // Concise stdout summary
