@@ -181,7 +181,7 @@ export async function runPushPatches({
   callerTemplatesDir,
   owners,                  // optional: filter active orgs to this allowlist
   includeInactive = false,
-  callerRef = DEFAULT_CALLER_REF,
+  callerRef,
   dryRun = false,
   newVersion,              // PR title/body label
   token = process.env.FLEET_PAT ?? process.env.GITHUB_TOKEN,
@@ -193,6 +193,8 @@ export async function runPushPatches({
   if (!token) throw new Error("runPushPatches needs FLEET_PAT or GITHUB_TOKEN.");
   const registry = loadOrgRegistry(orgsConfigPath);
   const ownerFilters = owners ?? [];
+  const callerRefExplicit = callerRef !== undefined;
+  const requestedCallerRef = callerRef ?? DEFAULT_CALLER_REF;
   let filtered;
   if (includeInactive) {
     if (ownerFilters.length !== 1) {
@@ -202,11 +204,11 @@ export async function runPushPatches({
     const invalidPinned = registry.invalid.find(
       (row) => row.entry?.name === owner && /pinned_version/.test(row.reason),
     );
-    if (invalidPinned && callerRef === DEFAULT_CALLER_REF) {
+    if (invalidPinned && !callerRefExplicit) {
       throw new Error(`includeInactive handoff for ${owner} needs --caller-ref because the org has no pinned_version.`);
     }
     let org = registry.orgs.find((entry) => entry.name === owner);
-    if (!org && invalidPinned && callerRef !== DEFAULT_CALLER_REF) {
+    if (!org && invalidPinned && callerRefExplicit) {
       org = {
         name: invalidPinned.entry.name,
         retainer_status: "inactive",
@@ -224,7 +226,7 @@ export async function runPushPatches({
     if (org.retainer_status !== "inactive") {
       throw new Error(`includeInactive handoff only supports inactive orgs; ${owner} is ${org.retainer_status}.`);
     }
-    const effectiveCallerRef = callerRef === DEFAULT_CALLER_REF ? org.pinned_version : callerRef;
+    const effectiveCallerRef = callerRefExplicit ? requestedCallerRef : org.pinned_version;
     if (!effectiveCallerRef) {
       throw new Error(`includeInactive handoff for ${owner} needs pinned_version or --caller-ref.`);
     }
@@ -232,8 +234,8 @@ export async function runPushPatches({
   } else {
     filtered = patchTargets(registry, { owners: ownerFilters }).map((org) => ({
       ...org,
-      callerRef,
-      newVersion: newVersion ?? callerRef,
+      callerRef: requestedCallerRef,
+      newVersion: newVersion ?? requestedCallerRef,
     }));
   }
   const selected = new Set(filtered.map((org) => org.name));
@@ -320,7 +322,7 @@ async function main() {
     callerTemplatesDir: args.callerTemplatesDir,
     owners:             args.owners,
     includeInactive:    args.includeInactive,
-    callerRef:          args.callerRef ?? DEFAULT_CALLER_REF,
+    callerRef:          args.callerRef,
     dryRun:             args.dryRun,
     newVersion:         args.newVersion,
     cloneConsumer,

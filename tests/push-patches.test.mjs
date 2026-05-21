@@ -546,6 +546,49 @@ test("runPushPatches: includeInactive accepts explicit callerRef when inactive o
   assert.equal(summary.invalidOrgs.length, 1, "normal registry invalid row is preserved");
 });
 
+test("runPushPatches: includeInactive treats explicit callerRef v1 as intentional without pinned_version", async () => {
+  const orgsPath = withTempConfig({ orgs: [
+    {
+      name: "ALX-Finance",
+      retainer_status: "inactive",
+      fleet_repo: "ALX-Finance/.github",
+    },
+  ]});
+  const tpl = fakeTemplatesDir({
+    "pipeline-branch-name.yml": [
+      "jobs:",
+      "  branch:",
+      "    uses: leebaroneau/pipeline-core/.github/workflows/pipeline-branch-name.yml@v1",
+      "",
+    ].join("\n"),
+  });
+  const consumerDir = fakeConsumer({
+    "pipeline-branch-name.yml": [
+      "jobs:",
+      "  branch:",
+      "    uses: leebaroneau/pipeline-core/.github/workflows/pipeline-branch-name.yml@v1.0.10",
+      "",
+    ].join("\n"),
+  });
+
+  const summary = await runPushPatches({
+    orgsConfigPath: orgsPath,
+    callerTemplatesDir: tpl,
+    includeInactive: true,
+    owners: ["ALX-Finance"],
+    callerRef: "v1",
+    dryRun: true,
+    token: "fake",
+    listConsumerRepos: async () => [{ owner: "ALX-Finance", name: "alx-site", branch: "main", tier: 1 }],
+    cloneConsumer: async () => consumerDir,
+  });
+
+  assert.equal(summary.orgs[0].name, "ALX-Finance");
+  assert.equal(summary.orgs[0].repos[0].action, "dry-run");
+  assert.deepEqual(summary.orgs[0].repos[0].plan.updated, ["pipeline-branch-name.yml"]);
+  assert.equal(summary.invalidOrgs.length, 1, "normal registry invalid row is preserved");
+});
+
 test("runPushPatches: includeInactive does not bypass patches_enabled for active orgs", async () => {
   const orgsPath = withTempConfig({ orgs: [
     {
