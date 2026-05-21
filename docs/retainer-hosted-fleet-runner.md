@@ -6,12 +6,15 @@ Retainer-hosted mode runs the daily Pipeline Core fleet sweep on each retainer's
 
 The fleet runner crosses several repos, but each repo has a narrow job:
 
-- `leebaroneau/pipeline-core`: upstream framework. It owns reusable workflows, the installer doctor, fleet doctor, discovery, tracker renderer, and templates.
-- `leebaroneau/pipeline-fleet`: fleet control plane. It owns the retainer registry, patch cascade, Lee's own fleet state, and the Coolify runner package.
-- `Haverford-Brands/.github`, `ALX-Finance/.github`, `Genvest-Property/.github`, `kwa-nguyen/.github`: one fleet repo per retainer. Each owns `config/repos.json`, `config/skip.json`, state files, and the tracker README for that retainer.
-- Consumer repos: actual product, theme, and service repos using `.github/workflows/pipeline-*.yml`. No runner code goes here.
-- `leebaroneau/notion-github-sync`: separate Notion and GitHub Project mirror. Retainer-hosted fleet runner work does not change it.
-- `leebaroneau/lee-dashboard`: workspace and brain control repo. Retainer-hosted fleet runner work does not put product code here.
+| Repo | Purpose | Change in this plan |
+| --- | --- | --- |
+| `leebaroneau/pipeline-core` | Upstream framework. Owns reusable workflows, installer doctor, fleet doctor, discovery, tracker renderer, and templates. | Template and docs updates prefer retainer-hosted Coolify. |
+| `leebaroneau/pipeline-fleet` | Fleet control plane. Owns the retainer registry, patch cascade, Lee's own fleet state, and the Coolify runner package. | Adds lifecycle flags, runner package, patch docs, and offboarding docs. |
+| `Haverford-Brands/.github` | Haverford's retainer fleet repo. Owns `config/repos.json`, `config/skip.json`, state files, and tracker README. | Changes later after the pilot disables the old schedule. |
+| `ALX-Finance/.github`, `Genvest-Property/.github`, `kwa-nguyen/.github` | Retainer fleet repos with the same shape as Haverford's fleet repo. | Same retainer-hosted runner model, rolled out after Haverford. |
+| Consumer repos | Actual product, theme, and service repos using `.github/workflows/pipeline-*.yml`. | No runner code. They may receive final caller pin PRs during offboarding. |
+| `leebaroneau/notion-github-sync` | Separate Notion and GitHub Project mirror. | No change. |
+| `leebaroneau/lee-dashboard` | Workspace and brain control repo. | No product code change. |
 
 ## Coolify Deployment
 
