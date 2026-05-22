@@ -7,8 +7,16 @@ Retainer-hosted GitHub Actions runners for a retainer org. Each retainer that ha
 | Repo | Role |
 | --- | --- |
 | `leebaroneau/pipeline-core` | Reusable workflows. Each accepts a `runner` input defaulting to `["self-hosted", "retainer"]` from v1.1.0 onwards. |
-| `leebaroneau/pipeline-fleet` (this repo) | Hosts `docker-compose.actions-runner.yml` (this package) and the runbook below. |
+| `leebaroneau/pipeline-fleet` (this repo) | Hosts `docker-compose.actions-runner.yml` + `runner.Dockerfile` (this package) and the runbook below. |
 | `<retainer>/<consumer-repo>` | Picks up the new default automatically via `@v1`. No file change required on the consumer side once v1.1.0 ships. |
+
+## Runner Image
+
+The pool builds a thin extension of `myoung34/github-runner:latest` defined in `runner.Dockerfile`. The extension adds the `docker.io` Debian package so jobs can call `docker compose config` (used by pipeline-core's `pr-guard.yml`).
+
+The Docker daemon socket is **not** mounted. Adding the daemon socket would give every CI job effective root on the host. The CLI binary alone is harmless without a reachable daemon — pr-guard only needs the parser.
+
+If a consumer workflow needs to actually build or run containers on the runner, it should target a separate runner pool (not deployed here) rather than mounting the host daemon.
 
 ## Coolify Deployment
 
