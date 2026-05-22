@@ -83,19 +83,17 @@ gh workflow run "Fleet — doctor + discover" --repo leebaroneau/pipeline-fleet
 gh workflow run "Fleet — doctor + discover" --repo leebaroneau/pipeline-fleet -f mode=discover
 ```
 
-### Retainer-hosted Coolify runner
+### Self-hosted GitHub Actions runner pool
 
-Retainer-hosted mode runs the daily fleet sweep on each retainer's Coolify server. Lee controls template releases and patch pushes from this repo, but runtime execution and org-scoped tokens live with the retainer.
+Retainers whose hosted-runner minute budget is exhausted can deploy a self-hosted Actions runner pool on their own Coolify, so CI compute lands locally while orchestration stays on GitHub. The daily fleet sweep then rides through this pool as a free job (self-hosted runner minutes don't count against the org's GH Actions quota).
 
-Retainer orgs can run the sweep as a one-shot Coolify service using the Docker packaging in this repo:
+Files:
 
-- [`Dockerfile`](Dockerfile) builds a Node 22 image with `git` and bakes in `node scripts/fleet-runner.mjs --once` as the container command.
-- [`docker-compose.coolify.yml`](docker-compose.coolify.yml) defines the `pipeline-fleet-runner` service and required runtime environment.
-- [`.env.example`](.env.example) shows the Haverford-style env shape; set `FLEET_PAT` to the scoped retainer fleet PAT before deploying.
+- [`runner.Dockerfile`](runner.Dockerfile) — extends `myoung34/github-runner:latest` with the Docker CLI (no daemon).
+- [`docker-compose.actions-runner.yml`](docker-compose.actions-runner.yml) — 2-slot ephemeral pool.
+- [`.env.actions-runner.example`](.env.actions-runner.example) — runtime env shape (`ACCESS_TOKEN`, `RUNNER_OWNER`, `RUNNER_LABELS`).
 
-Deploy this on the retainer server. Schedule it from the Coolify UI or an external cron; each invocation performs one fleet run and exits. Default mode is `both`, with `COMMIT_CHANGES=1`, `ORGS_CONFIG_PATH=config/orgs.json`, and `PIPELINE_CORE_REF=v1`. If `pipeline-core` needs an authenticated clone, set `PIPELINE_CORE_TOKEN`.
-
-For setup, verification, offboarding, and repo boundary details, read [docs/retainer-hosted-fleet-runner.md](docs/retainer-hosted-fleet-runner.md).
+For setup, verification, scaling, rotation, and decommission, read [docs/self-hosted-runner-pool.md](docs/self-hosted-runner-pool.md).
 
 ## Auth
 
