@@ -99,7 +99,7 @@ test("listConsumerRepos: missing config/repos.json throws with a clear message",
 });
 
 import { mkdtempSync as mkdir, writeFileSync as writef, mkdirSync as mkd } from "node:fs";
-import { planRefresh, renderCallerTemplate } from "../scripts/push-patches.mjs";
+import { planRefresh, renderCallerTemplate, upsertAgentInstructions } from "../scripts/push-patches.mjs";
 
 function fakeTemplatesDir(files) {
   const dir = mkdir(join(tmpdir(), "tpl-"));
@@ -197,6 +197,56 @@ test("renderCallerTemplate: pins Pipeline Core reusable workflow refs only", () 
   );
 });
 
+test("upsertAgentInstructions: appends marked Pipeline Core instructions to existing AGENTS.md", () => {
+  const existing = "# Existing\n\nKeep local guidance.\n";
+  const block = "<!-- pipeline-core-agent-instructions:start -->\n## Pipeline Core Repo Ownership\n\nOwner repo only.\n<!-- pipeline-core-agent-instructions:end -->\n";
+  const out = upsertAgentInstructions({ existingText: existing, blockText: block });
+
+  assert.match(out, /Keep local guidance\./);
+  assert.match(out, /## Pipeline Core Repo Ownership/);
+  assert.equal(out.match(/pipeline-core-agent-instructions:start/g).length, 1);
+});
+
+test("planRefresh: missing AGENTS.md is reported as agent-instructions added", () => {
+  const tpl = fakeTemplatesDir({ "pipeline-branch-name.yml": "v1\n" });
+  const agentInstructionsPath = join(fakeTemplatesDir({
+    "pipeline-agent-instructions.md": "<!-- pipeline-core-agent-instructions:start -->\n## Pipeline Core Repo Ownership\n<!-- pipeline-core-agent-instructions:end -->\n",
+  }), "pipeline-agent-instructions.md");
+  const repo = fakeConsumer({ "pipeline-branch-name.yml": "v1\n" });
+
+  const r = planRefresh({ repoDir: repo, callerTemplatesDir: tpl, agentInstructionsPath });
+
+  assert.equal(r.agentInstructions.action, "added");
+  assert.equal(r.agentInstructions.path, "AGENTS.md");
+});
+
+test("planRefresh: skipCallers only plans agent instructions and leaves workflow callers alone", () => {
+  const tpl = fakeTemplatesDir({ "pipeline-doctor.yml": "name: doctor v1\n" });
+  const agentInstructionsPath = join(fakeTemplatesDir({
+    "pipeline-agent-instructions.md": "<!-- pipeline-core-agent-instructions:start -->\n## Pipeline Core Repo Ownership\n<!-- pipeline-core-agent-instructions:end -->\n",
+  }), "pipeline-agent-instructions.md");
+  const repo = fakeConsumer({});
+
+  const r = planRefresh({ repoDir: repo, callerTemplatesDir: tpl, agentInstructionsPath, skipCallers: true });
+
+  assert.deepEqual(r.added, []);
+  assert.deepEqual(r.updated, []);
+  assert.deepEqual(r.removed, []);
+  assert.equal(r.agentInstructions.action, "added");
+});
+
+test("planRefresh: existing matching AGENTS.md is reported as agent-instructions unchanged", () => {
+  const tpl = fakeTemplatesDir({ "pipeline-branch-name.yml": "v1\n" });
+  const block = "<!-- pipeline-core-agent-instructions:start -->\n## Pipeline Core Repo Ownership\n<!-- pipeline-core-agent-instructions:end -->\n";
+  const agentInstructionsPath = join(fakeTemplatesDir({ "pipeline-agent-instructions.md": block }), "pipeline-agent-instructions.md");
+  const repo = fakeConsumer({ "pipeline-branch-name.yml": "v1\n" });
+  writef(join(repo, "AGENTS.md"), block);
+
+  const r = planRefresh({ repoDir: repo, callerTemplatesDir: tpl, agentInstructionsPath });
+
+  assert.equal(r.agentInstructions.action, "unchanged");
+});
+
 import { applyRefresh } from "../scripts/push-patches.mjs";
 import { readFileSync, existsSync } from "node:fs";
 
@@ -226,6 +276,19 @@ test("applyRefresh: no-op when plan is all-unchanged", () => {
   const plan = planRefresh({ repoDir: repo, callerTemplatesDir: tpl });
   const written = applyRefresh({ plan, callerTemplatesDir: tpl, repoDir: repo });
   assert.deepEqual(written, []);
+});
+
+test("applyRefresh: writes AGENTS.md when agent instructions are added", () => {
+  const tpl = fakeTemplatesDir({ "pipeline-branch-name.yml": "v1\n" });
+  const agentInstructionsPath = join(fakeTemplatesDir({
+    "pipeline-agent-instructions.md": "<!-- pipeline-core-agent-instructions:start -->\n## Pipeline Core Repo Ownership\n<!-- pipeline-core-agent-instructions:end -->\n",
+  }), "pipeline-agent-instructions.md");
+  const repo = fakeConsumer({ "pipeline-branch-name.yml": "v1\n" });
+  const plan = planRefresh({ repoDir: repo, callerTemplatesDir: tpl, agentInstructionsPath });
+  const written = applyRefresh({ plan, callerTemplatesDir: tpl, repoDir: repo, agentInstructionsPath });
+
+  assert.deepEqual(written.map((p) => p.replace(repo + "/", "")), ["AGENTS.md"]);
+  assert.match(readFileSync(join(repo, "AGENTS.md"), "utf8"), /Pipeline Core Repo Ownership/);
 });
 
 import { redactToken } from "../scripts/push-patches.mjs";
@@ -385,6 +448,7 @@ test("openRefreshPR: git push uses askpass env without token-bearing argv", () =
     branch: "chore/refresh-pipeline-core-v1",
     written: ["/tmp/private-repo/.github/workflows/pipeline-doctor.yml"],
     newVersion: "v1",
+    issueNumber: 42,
     token: "fleet-secret",
     plan: { added: ["pipeline-doctor.yml"], updated: [], removed: [] },
     runCommand: (cmd, args, opts) => {
@@ -402,9 +466,31 @@ test("openRefreshPR: git push uses askpass env without token-bearing argv", () =
   assert.equal(push.env.GIT_AUTH_USERNAME, "x-access-token");
   assert.equal(push.env.GIT_AUTH_TOKEN, "fleet-secret");
   assert.ok(push.env.GIT_ASKPASS);
+
+  const prCreate = calls.find((call) => call.cmd === "gh" && call.args[0] === "pr" && call.args[1] === "create");
+  assert.ok(prCreate);
+  assert.match(prCreate.args.join("\n"), /Fixes #42/);
 });
 
-import { runPushPatches } from "../scripts/push-patches.mjs";
+import { createRefreshIssue, runPushPatches } from "../scripts/push-patches.mjs";
+
+test("createRefreshIssue: ensures type label and returns the created issue number", () => {
+  const calls = [];
+  const issue = createRefreshIssue({
+    repoSlug: "Org/repo",
+    title: "Task: refresh Pipeline Core generated files",
+    body: "Issue body",
+    runCommand: (cmd, args, opts) => {
+      calls.push({ cmd, args, env: opts?.env });
+      if (args[0] === "issue") return { status: 0, stdout: "https://github.com/Org/repo/issues/123\n", stderr: "" };
+      return { status: 0, stdout: "", stderr: "" };
+    },
+  });
+
+  assert.equal(issue.number, 123);
+  assert.deepEqual(calls[0].args.slice(0, 3), ["label", "create", "type:task"]);
+  assert.deepEqual(calls[1].args.slice(0, 3), ["issue", "create", "--repo"]);
+});
 
 test("runPushPatches --dry-run: returns plan without mutating filesystem or opening PRs", async () => {
   // 1 fake org config + 1 fake consumer (in-tree clone, no remote)
@@ -438,6 +524,61 @@ test("runPushPatches --dry-run: returns plan without mutating filesystem or open
     "name: branch-name v1\n",
     "dry-run leaves consumer untouched",
   );
+});
+
+test("runPushPatches --agent-instructions-only: dry-run does not plan caller workflow writes", async () => {
+  const orgsPath = withTempConfig({ orgs: [
+    { name: "leebaroneau", retainer_status: "self", fleet_repo: "leebaroneau/pipeline-fleet" },
+  ]});
+  const tpl = fakeTemplatesDir({ "pipeline-doctor.yml": "name: doctor v1\n" });
+  const agentInstructionsPath = join(fakeTemplatesDir({
+    "pipeline-agent-instructions.md": "<!-- pipeline-core-agent-instructions:start -->\n## Pipeline Core Repo Ownership\n<!-- pipeline-core-agent-instructions:end -->\n",
+  }), "pipeline-agent-instructions.md");
+  const consumerDir = fakeConsumer({});
+
+  const summary = await runPushPatches({
+    orgsConfigPath: orgsPath,
+    callerTemplatesDir: tpl,
+    agentInstructionsPath,
+    agentInstructionsOnly: true,
+    dryRun: true,
+    token: "fake",
+    listConsumerRepos: async () => [{ owner: "leebaroneau", name: "lee-dashboard", branch: "main", tier: 1 }],
+    cloneConsumer: async () => consumerDir,
+  });
+
+  const plan = summary.orgs[0].repos[0].plan;
+  assert.deepEqual(plan.added, []);
+  assert.deepEqual(plan.updated, []);
+  assert.equal(plan.agentInstructions.action, "added");
+});
+
+test("runPushPatches: creates an issue first, uses a task branch, and passes issue number to PR creation", async () => {
+  const orgsPath = withTempConfig({ orgs: [
+    { name: "leebaroneau", retainer_status: "self", fleet_repo: "leebaroneau/pipeline-fleet" },
+  ]});
+  const tpl = fakeTemplatesDir({ "pipeline-doctor.yml": "name: doctor v1\n" });
+  const consumerDir = fakeConsumer({});
+  writef(join(consumerDir, ".keep"), "");
+  gitInitAll(consumerDir);
+  let prArgs;
+
+  const summary = await runPushPatches({
+    orgsConfigPath: orgsPath,
+    callerTemplatesDir: tpl,
+    token: "fake",
+    listConsumerRepos: async () => [{ owner: "leebaroneau", name: "lee-dashboard", branch: "main", tier: 1 }],
+    cloneConsumer: async () => consumerDir,
+    createIssue: async () => ({ number: 77, url: "https://github.com/leebaroneau/lee-dashboard/issues/77" }),
+    openPR: async (args) => {
+      prArgs = args;
+      return "https://example.com/pr/1";
+    },
+  });
+
+  assert.equal(summary.orgs[0].repos[0].action, "pr-opened");
+  assert.equal(prArgs.issueNumber, 77);
+  assert.equal(prArgs.branch, "task/77-refresh-pipeline-core");
 });
 
 test("runPushPatches: inactive org is skipped", async () => {
@@ -550,6 +691,7 @@ test("runPushPatches: includeInactive defaults callerRef and metadata to pinned_
     token: "fake",
     listConsumerRepos: async () => [{ owner: "ALX-Finance", name: "alx-site", branch: "main", tier: 1 }],
     cloneConsumer: async () => consumerDir,
+    createIssue: async () => ({ number: 88, url: "https://github.com/ALX-Finance/alx-site/issues/88" }),
     openPR: async (args) => {
       prArgs = args;
       return "https://example.com/pr/1";
@@ -558,7 +700,8 @@ test("runPushPatches: includeInactive defaults callerRef and metadata to pinned_
 
   assert.equal(summary.orgs[0].repos[0].action, "pr-opened");
   assert.equal(prArgs.newVersion, "v1.0.11");
-  assert.equal(prArgs.branch, "chore/refresh-pipeline-core-v1.0.11");
+  assert.equal(prArgs.issueNumber, 88);
+  assert.equal(prArgs.branch, "task/88-refresh-pipeline-core");
   assert.equal(
     readFileSync(join(consumerDir, ".github/workflows/pipeline-branch-name.yml"), "utf8"),
     [
@@ -610,6 +753,7 @@ test("runPushPatches: includeInactive accepts explicit callerRef when inactive o
       return [{ owner: "ALX-Finance", name: "alx-site", branch: "main", tier: 1 }];
     },
     cloneConsumer: async () => consumerDir,
+    createIssue: async () => ({ number: 89, url: "https://github.com/ALX-Finance/alx-site/issues/89" }),
     openPR: async (args) => {
       prArgs = args;
       return "https://example.com/pr/2";
@@ -619,7 +763,8 @@ test("runPushPatches: includeInactive accepts explicit callerRef when inactive o
   assert.equal(summary.orgs[0].name, "ALX-Finance");
   assert.equal(summary.orgs[0].repos[0].action, "pr-opened");
   assert.equal(prArgs.newVersion, "v1.0.11");
-  assert.equal(prArgs.branch, "chore/refresh-pipeline-core-v1.0.11");
+  assert.equal(prArgs.issueNumber, 89);
+  assert.equal(prArgs.branch, "task/89-refresh-pipeline-core");
   assert.deepEqual(summary.orgs[0].repos[0].plan.updated, ["pipeline-branch-name.yml"]);
   assert.equal(
     readFileSync(join(consumerDir, ".github/workflows/pipeline-branch-name.yml"), "utf8"),
@@ -719,6 +864,32 @@ test("runPushPatches: --owner filter restricts to a single active org", async ()
   assert.equal(summary.orgs.length, 1);
   assert.equal(summary.orgs[0].name, "Haverford-Brands");
   assert.deepEqual(summary.skippedOrgs.map((org) => org.name), ["leebaroneau"]);
+});
+
+test("runPushPatches: --repo filter restricts work inside the selected owner", async () => {
+  const orgsPath = withTempConfig({ orgs: [
+    { name: "leebaroneau", retainer_status: "self", fleet_repo: "leebaroneau/pipeline-fleet" },
+  ]});
+  const cloned = [];
+  const summary = await runPushPatches({
+    orgsConfigPath: orgsPath,
+    callerTemplatesDir: fakeTemplatesDir({}),
+    owners: ["leebaroneau"],
+    repoFilters: ["leebaroneau/template-agent"],
+    dryRun: true,
+    token: "fake",
+    listConsumerRepos: async () => [
+      { owner: "leebaroneau", name: "lee-dashboard", branch: "main", tier: 1 },
+      { owner: "leebaroneau", name: "template-agent", branch: "main", tier: 1 },
+    ],
+    cloneConsumer: async ({ owner, name }) => {
+      cloned.push(`${owner}/${name}`);
+      return fakeConsumer({});
+    },
+  });
+
+  assert.deepEqual(cloned, ["leebaroneau/template-agent"]);
+  assert.deepEqual(summary.orgs[0].repos.map((repo) => repo.slug), ["leebaroneau/template-agent"]);
 });
 
 test("runPushPatches: skippedOrgs are normalized separately from invalidOrgs", async () => {
