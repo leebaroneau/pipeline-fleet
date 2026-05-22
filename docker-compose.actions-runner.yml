@@ -16,7 +16,9 @@
 
 services:
   runner-1:
-    image: myoung34/github-runner:latest
+    build:
+      context: .
+      dockerfile: runner.Dockerfile
     environment:
       ACCESS_TOKEN: ${ACCESS_TOKEN:?ACCESS_TOKEN is required}
       RUNNER_NAME: ${RUNNER_OWNER}-runner-1
@@ -28,7 +30,9 @@ services:
     restart: unless-stopped
 
   runner-2:
-    image: myoung34/github-runner:latest
+    build:
+      context: .
+      dockerfile: runner.Dockerfile
     environment:
       ACCESS_TOKEN: ${ACCESS_TOKEN:?ACCESS_TOKEN is required}
       RUNNER_NAME: ${RUNNER_OWNER}-runner-2
