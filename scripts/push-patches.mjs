@@ -50,6 +50,8 @@ const YAML_EXT = /\.(yml|yaml)$/;
 const DEFAULT_CALLER_REF = "v1";
 const PIPELINE_CORE_WORKFLOW_REF = /leebaroneau\/pipeline-core\/\.github\/workflows\/([^@\s'"]+\.ya?ml)@[^ \t\r\n'"]+/g;
 const GIT_ASKPASS_PATH = join(dirname(fileURLToPath(import.meta.url)), "lib", "git-askpass.mjs");
+const AGENT_INSTRUCTIONS_START = "<!-- pipeline-core-agent-instructions:start -->";
+const AGENT_INSTRUCTIONS_END = "<!-- pipeline-core-agent-instructions:end -->";
 
 export function renderCallerTemplate(text, { callerRef = DEFAULT_CALLER_REF } = {}) {
   return String(text).replace(PIPELINE_CORE_WORKFLOW_REF, (_match, workflow) => (
@@ -57,9 +59,42 @@ export function renderCallerTemplate(text, { callerRef = DEFAULT_CALLER_REF } = 
   ));
 }
 
-export function planRefresh({ repoDir, callerTemplatesDir, callerRef = DEFAULT_CALLER_REF }) {
-  const templates = readdirSync(callerTemplatesDir)
-    .filter((f) => f.startsWith(PIPELINE_PREFIX) && YAML_EXT.test(f));
+export function upsertAgentInstructions({ existingText = "", blockText }) {
+  const block = String(blockText ?? "").trimEnd() + "\n";
+  const existing = String(existingText ?? "").trimEnd();
+  const start = existing.indexOf(AGENT_INSTRUCTIONS_START);
+  const end = existing.indexOf(AGENT_INSTRUCTIONS_END);
+
+  if (start !== -1 && end !== -1 && end > start) {
+    const before = existing.slice(0, start).trimEnd();
+    const after = existing.slice(end + AGENT_INSTRUCTIONS_END.length).trimStart();
+    return [before, block.trimEnd(), after].filter(Boolean).join("\n\n") + "\n";
+  }
+
+  return [existing, block.trimEnd()].filter(Boolean).join("\n\n") + "\n";
+}
+
+function planAgentInstructions({ repoDir, agentInstructionsPath }) {
+  const dest = join(repoDir, "AGENTS.md");
+  if (!agentInstructionsPath) {
+    return { path: "AGENTS.md", action: "skipped" };
+  }
+  const blockText = readF(agentInstructionsPath, "utf8");
+  if (!existsSync(dest)) {
+    return { path: "AGENTS.md", action: "added" };
+  }
+  const existingText = readF(dest, "utf8");
+  const nextText = upsertAgentInstructions({ existingText, blockText });
+  return {
+    path: "AGENTS.md",
+    action: existingText === nextText ? "unchanged" : "updated",
+  };
+}
+
+export function planRefresh({ repoDir, callerTemplatesDir, callerRef = DEFAULT_CALLER_REF, agentInstructionsPath, skipCallers = false }) {
+  const templates = skipCallers
+    ? []
+    : readdirSync(callerTemplatesDir).filter((f) => f.startsWith(PIPELINE_PREFIX) && YAML_EXT.test(f));
   const workflowsDir = join(repoDir, ".github", "workflows");
   const existing = existsSync(workflowsDir)
     ? readdirSync(workflowsDir).filter((f) => f.startsWith(PIPELINE_PREFIX) && YAML_EXT.test(f))
@@ -84,12 +119,13 @@ export function planRefresh({ repoDir, callerTemplatesDir, callerRef = DEFAULT_C
   }
 
   const templateSet = new Set(templates);
-  const removed = existing.filter((f) => !templateSet.has(f));
+  const removed = skipCallers ? [] : existing.filter((f) => !templateSet.has(f));
+  const agentInstructions = planAgentInstructions({ repoDir, agentInstructionsPath });
 
-  return { unchanged, updated, added, removed };
+  return { unchanged, updated, added, removed, agentInstructions };
 }
 
-export function applyRefresh({ plan, callerTemplatesDir, repoDir, callerRef = DEFAULT_CALLER_REF }) {
+export function applyRefresh({ plan, callerTemplatesDir, repoDir, callerRef = DEFAULT_CALLER_REF, agentInstructionsPath }) {
   const written = [];
   const toWrite = [...plan.added, ...plan.updated];
   for (const name of toWrite) {
@@ -97,6 +133,13 @@ export function applyRefresh({ plan, callerTemplatesDir, repoDir, callerRef = DE
     mkdirSync(dirname(dest), { recursive: true });
     const rendered = renderCallerTemplate(readF(join(callerTemplatesDir, name), "utf8"), { callerRef });
     writeFileSync(dest, rendered);
+    written.push(dest);
+  }
+  if (agentInstructionsPath && ["added", "updated"].includes(plan.agentInstructions?.action)) {
+    const dest = join(repoDir, "AGENTS.md");
+    const existingText = existsSync(dest) ? readF(dest, "utf8") : "";
+    const blockText = readF(agentInstructionsPath, "utf8");
+    writeFileSync(dest, upsertAgentInstructions({ existingText, blockText }));
     written.push(dest);
   }
   return written;
@@ -117,6 +160,11 @@ function authenticatedGitEnv(token) {
     GIT_AUTH_USERNAME: "x-access-token",
     GIT_AUTH_TOKEN: token,
   };
+}
+
+function githubCliEnv(token) {
+  if (!token) return process.env;
+  return { ...process.env, GH_TOKEN: token, GITHUB_TOKEN: token };
 }
 
 function run(cmd, args, opts = {}) {
@@ -154,26 +202,60 @@ export async function cloneConsumer({ owner, name, branch = "main", token, urlOv
   return dir;
 }
 
+export function createRefreshIssue({
+  repoSlug,
+  title,
+  body,
+  token,
+  runCommand = run,
+}) {
+  const opts = { env: githubCliEnv(token) };
+  runCommand("gh", [
+    "label", "create", "type:task",
+    "--repo", repoSlug,
+    "--color", "bfdadc",
+    "--description", "Internal work: refactor, docs, infra (Jira: Task)",
+    "--force",
+  ], opts);
+  const created = runCommand("gh", [
+    "issue", "create",
+    "--repo", repoSlug,
+    "--title", title,
+    "--label", "type:task",
+    "--body", body,
+  ], opts);
+  const url = created.stdout?.trim?.() || String(created).trim();
+  const match = url.match(/\/issues\/(\d+)(?:$|\b)/);
+  if (!match) {
+    throw new Error(`Could not parse created issue number from: ${url}`);
+  }
+  return { number: Number(match[1]), url };
+}
+
 function relativizePath(repoDir, absPath) {
   return relative(repoDir, absPath) || absPath;
 }
 
-export function openRefreshPR({ repoDir, branch, written, newVersion, plan, token, runCommand = run }) {
+export function openRefreshPR({ repoDir, branch, written, newVersion, plan, issueNumber, token, runCommand = run }) {
   runCommand("git", ["-C", repoDir, "checkout", "-b", branch]);
   runCommand("git", ["-C", repoDir, "add", ...written.map((p) => relativizePath(repoDir, p))]);
   const summary = [
     plan.added.length    ? `add: ${plan.added.join(", ")}` : null,
     plan.updated.length  ? `update: ${plan.updated.join(", ")}` : null,
+    ["added", "updated"].includes(plan.agentInstructions?.action) ? `${plan.agentInstructions.action}: AGENTS.md` : null,
   ].filter(Boolean).join("; ");
-  const title = `chore(pipeline-core): refresh caller workflows to ${newVersion}`;
+  const title = `Task: refresh Pipeline Core generated files to ${newVersion}`;
   const body = [
+    issueNumber ? `Fixes #${issueNumber}` : "",
+    ``,
     `## Summary`,
     ``,
-    `Refreshes pipeline-core caller workflows to match \`leebaroneau/pipeline-core@${newVersion}\`.`,
+    `Refreshes Pipeline Core generated files to match \`leebaroneau/pipeline-core@${newVersion}\`.`,
     ``,
     `### Changed`,
     plan.added.length    ? `**Added** (${plan.added.length}):\n- ${plan.added.join("\n- ")}` : "",
     plan.updated.length  ? `**Updated** (${plan.updated.length}):\n- ${plan.updated.join("\n- ")}` : "",
+    ["added", "updated"].includes(plan.agentInstructions?.action) ? `**Agent instructions**: ${plan.agentInstructions.action} \`AGENTS.md\`` : "",
     plan.removed.length  ? `**Note:** these caller files exist in this repo but are no longer in the upstream templates — left in place for your review:\n- ${plan.removed.join("\n- ")}` : "",
     ``,
     `Generated by \`pipeline-fleet/scripts/push-patches.mjs\`.`,
@@ -181,18 +263,21 @@ export function openRefreshPR({ repoDir, branch, written, newVersion, plan, toke
   runCommand("git", ["-C", repoDir, "commit", "-m", `${title}\n\n${summary}`]);
   runCommand("git", ["-C", repoDir, "push", "-u", "origin", branch], { env: authenticatedGitEnv(token) });
   try {
-    runCommand("gh", ["pr", "create", "--head", branch, "--title", title, "--body", body], { cwd: repoDir });
+    runCommand("gh", ["pr", "create", "--head", branch, "--title", title, "--body", body], { cwd: repoDir, env: githubCliEnv(token) });
   } catch (err) {
     process.stderr.write(`Branch pushed, but \`gh pr create\` failed: ${redactToken(err.message)}\n`);
     return null;
   }
-  return runCommand("gh", ["pr", "view", "--json", "url", "--jq", ".url"], { cwd: repoDir }).stdout.trim();
+  return runCommand("gh", ["pr", "view", "--json", "url", "--jq", ".url"], { cwd: repoDir, env: githubCliEnv(token) }).stdout.trim();
 }
 
 export async function runPushPatches({
   orgsConfigPath,
   callerTemplatesDir,
+  agentInstructionsPath,
+  agentInstructionsOnly = false,
   owners,                  // optional: filter active orgs to this allowlist
+  repoFilters = [],         // optional: exact owner/name allowlist inside selected orgs
   includeInactive = false,
   callerRef,
   dryRun = false,
@@ -201,6 +286,7 @@ export async function runPushPatches({
   // Injected dependencies (defaults are real):
   listConsumerRepos: listFn = listConsumerRepos,
   cloneConsumer: cloneFn,
+  createIssue: createIssueFn = createRefreshIssue,
   openPR: openFn = openRefreshPR,
 }) {
   if (!token) throw new Error("runPushPatches needs FLEET_PAT or GITHUB_TOKEN.");
@@ -256,13 +342,22 @@ export async function runPushPatches({
 
   const orgsOut = [];
   for (const org of filtered) {
-    const consumers = await listFn({ owner: org.name, fleetRepo: org.fleet_repo, token });
+    const repoFilterSet = new Set(repoFilters);
+    const consumers = (await listFn({ owner: org.name, fleetRepo: org.fleet_repo, token }))
+      .filter((repo) => repoFilterSet.size === 0 || repoFilterSet.has(`${repo.owner}/${repo.name}`));
     const repos = [];
     for (const c of consumers) {
       const repoDir = await cloneFn({ owner: c.owner, name: c.name, branch: c.branch, token });
       try {
-        const plan = planRefresh({ repoDir, callerTemplatesDir, callerRef: org.callerRef });
-        const willWrite = plan.added.length + plan.updated.length;
+        const plan = planRefresh({
+          repoDir,
+          callerTemplatesDir,
+          callerRef: org.callerRef,
+          agentInstructionsPath,
+          skipCallers: agentInstructionsOnly,
+        });
+        const agentWillWrite = ["added", "updated"].includes(plan.agentInstructions?.action) ? 1 : 0;
+        const willWrite = plan.added.length + plan.updated.length + agentWillWrite;
         if (willWrite === 0) {
           repos.push({ slug: `${c.owner}/${c.name}`, plan, prUrl: null, action: "noop" });
           continue;
@@ -271,11 +366,21 @@ export async function runPushPatches({
           repos.push({ slug: `${c.owner}/${c.name}`, plan, prUrl: null, action: "dry-run" });
           continue;
         }
-        const branch = `chore/refresh-pipeline-core-${org.newVersion}`;
+        const issue = await createIssueFn({
+          repoSlug: `${c.owner}/${c.name}`,
+          title: `Task: refresh Pipeline Core generated files to ${org.newVersion}`,
+          body: [
+            `Refresh Pipeline Core generated files to match \`leebaroneau/pipeline-core@${org.newVersion}\`.`,
+            ``,
+            `This issue is generated by \`pipeline-fleet/scripts/push-patches.mjs\` so the resulting PR follows the issue-first Pipeline Core workflow.`,
+          ].join("\n"),
+          token,
+        });
+        const branch = `task/${issue.number}-refresh-pipeline-core`;
         preflightAutoPR({ repoDir, branch });
-        const written = applyRefresh({ plan, callerTemplatesDir, repoDir, callerRef: org.callerRef });
-        const prUrl = openFn({ repoDir, branch, written, newVersion: org.newVersion, plan, token });
-        repos.push({ slug: `${c.owner}/${c.name}`, plan, prUrl, action: "pr-opened" });
+        const written = applyRefresh({ plan, callerTemplatesDir, repoDir, callerRef: org.callerRef, agentInstructionsPath });
+        const prUrl = await openFn({ repoDir, branch, written, newVersion: org.newVersion, plan, issueNumber: issue.number, token });
+        repos.push({ slug: `${c.owner}/${c.name}`, plan, issueUrl: issue.url, prUrl, action: "pr-opened" });
       } catch (err) {
         repos.push({ slug: `${c.owner}/${c.name}`, plan: null, prUrl: null, action: "error", error: redactToken(err.message) });
       }
@@ -293,10 +398,13 @@ function parseArgs(argv) {
     const a = argv[i];
     if (a === "--orgs-config")      args.orgsConfigPath     = argv[++i];
     else if (a === "--templates")   args.callerTemplatesDir = argv[++i];
+    else if (a === "--agent-instructions") args.agentInstructionsPath = argv[++i];
     else if (a === "--owner")       args.owners.push(argv[++i]);
+    else if (a === "--repo")        (args.repoFilters ??= []).push(argv[++i]);
     else if (a === "--new-version") args.newVersion         = argv[++i];
     else if (a === "--caller-ref")  args.callerRef          = argv[++i];
     else if (a === "--include-inactive") args.includeInactive = true;
+    else if (a === "--agent-instructions-only") args.agentInstructionsOnly = true;
     else if (a === "--dry-run")     args.dryRun             = true;
     else if (a === "--help" || a === "-h") args.help        = true;
   }
@@ -313,7 +421,10 @@ Required:
   --templates <path>           pipeline-core/templates/caller-workflows/
 
 Options:
+  --agent-instructions <path>  pipeline-core/templates/pipeline-agent-instructions.md
+  --agent-instructions-only    Only upsert AGENTS.md; do not refresh caller workflow YAML
   --owner <name>               Restrict to one active org. Repeatable.
+  --repo <owner/name>          Restrict to an exact consumer repo. Repeatable.
   --new-version <ref>          Label shown in PR title/body (default: v1)
   --caller-ref <ref>           Pipeline Core reusable workflow ref (default: v1)
   --include-inactive           One-time handoff pin for exactly one --owner
@@ -333,8 +444,11 @@ async function main() {
   const summary = await runPushPatches({
     orgsConfigPath:     args.orgsConfigPath,
     callerTemplatesDir: args.callerTemplatesDir,
+    agentInstructionsPath: args.agentInstructionsPath,
     owners:             args.owners,
+    repoFilters:        args.repoFilters ?? [],
     includeInactive:    args.includeInactive,
+    agentInstructionsOnly: args.agentInstructionsOnly,
     callerRef:          args.callerRef,
     dryRun:             args.dryRun,
     newVersion:         args.newVersion,
