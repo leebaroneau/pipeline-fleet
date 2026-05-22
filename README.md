@@ -57,7 +57,7 @@ Upstream change in pipeline-core
 leebaroneau/pipeline-core           ← upstream framework
   ├── .github/workflows/fleet.yml   ← reusable workflow each fleet consumes
   ├── scripts/{discover,fleet-doctor,update-tracker,doctor,install}.mjs
-  └── templates/fleet/              ← skeleton for new org fleets
+  └── templates/pipeline-fleet/     ← skeleton for new org fleets
 
 leebaroneau/pipeline-fleet (THIS)   ← leebaroneau's own fleet + retainer registry
   ├── config/repos.json             ← leebaroneau repos under management

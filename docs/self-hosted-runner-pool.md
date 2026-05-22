@@ -25,7 +25,7 @@ Deploy on the retainer's Coolify server:
 1. Create a new Coolify Docker Compose resource:
    - Source: this repo (`leebaroneau/pipeline-fleet`) branch `main`.
    - Compose file: `docker-compose.actions-runner.yml`.
-   - Name: `actions-runner-<retainer-slug>` (e.g. `actions-runner-haverford`).
+   - Name: `pipeline-<retainer-slug>-runner-pool` (e.g. `pipeline-haverford-runner-pool`). See `docs/naming.md` in pipeline-core for the schema.
 2. Set environment variables (start from `.env.actions-runner.example`):
    - `ACCESS_TOKEN`: classic PAT on a user account with `admin:org` scope on the retainer org.
    - `RUNNER_OWNER`: retainer org name.
@@ -36,7 +36,7 @@ Deploy on the retainer's Coolify server:
 
 After the first deploy, confirm:
 
-- Two runners appear at `https://github.com/organizations/<retainer>/settings/actions/runners` named `<retainer>-runner-1` and `<retainer>-runner-2`.
+- Two runners appear at `https://github.com/organizations/<retainer>/settings/actions/runners` named `<retainer-org>-runner-1` and `<retainer-org>-runner-2` (each name comes from the `RUNNER_OWNER` env var, which is set to the GitHub org name — distinct from the short brand slug used in the Coolify app name).
 - Both are `Idle` initially.
 - Submitting a job that targets `runs-on: [self-hosted, retainer]` causes one runner to transition to `Active`, complete the job, and the container then auto-restarts.
 
