@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-05-20T11:44:31.803Z",
-  "startedAt": "2026-05-20T11:44:28.433Z",
+  "generatedAt": "2026-05-23T10:22:48.730Z",
+  "startedAt": "2026-05-23T10:22:45.865Z",
   "totals": {
     "managed": 2,
     "ok": 1,
@@ -291,10 +291,7 @@
               ],
               "reviewer_policy": {
                 "default_required_reviewers": 0,
-                "by_component": {
-                  "infra": 2,
-                  "auth": 2
-                }
+                "by_component": {}
               }
             }
           },

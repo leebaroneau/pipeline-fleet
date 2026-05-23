@@ -9,7 +9,7 @@ This repo is one of N independent org fleets — Haverford-Brands, ALX-Finance, 
 <!-- pipeline-fleet:tracker-start -->
 **2** repos under management · **1** OK · **1** failing · **1** with warnings
 
-_Updated 2026-05-20T11:44:31.803Z._
+_Updated 2026-05-23T10:22:48.730Z._
 
 | Repo | Status | Failures | Warnings |
 | --- | --- | ---: | ---: |
@@ -17,7 +17,7 @@ _Updated 2026-05-20T11:44:31.803Z._
 | [`leebaroneau/lee-dashboard`](https://github.com/leebaroneau/lee-dashboard) | ⚠️ warn | 0 | 1 |
 <!-- pipeline-fleet:tracker-end -->
 
-_Updated by: `scripts/update-tracker.mjs`. Last updated: 2026-05-20T11:44:31.803Z._
+_Updated by: `scripts/update-tracker.mjs`. Last updated: 2026-05-23T10:22:48.730Z._
 
 ## Retainer registry
 
