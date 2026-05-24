@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-05-23T10:22:48.730Z",
-  "startedAt": "2026-05-23T10:22:45.865Z",
+  "generatedAt": "2026-05-24T22:43:13.318Z",
+  "startedAt": "2026-05-24T22:43:09.142Z",
   "totals": {
     "managed": 2,
-    "ok": 1,
-    "failing": 1,
+    "ok": 2,
+    "failing": 0,
     "warningsOnly": 1
   },
   "results": [
@@ -190,14 +190,8 @@
       "branch": "main",
       "tier": 1,
       "result": {
-        "ok": false,
-        "failures": [
-          {
-            "check": "branchProtection",
-            "message": "No branch protection rule on `main`",
-            "remediation": "In Settings → Branches, add a protection rule for `main` that requires `pipeline/merge-gate`."
-          }
-        ],
+        "ok": true,
+        "failures": [],
         "warnings": [],
         "checks": {
           "config": {
@@ -306,18 +300,11 @@
             "warnings": []
           },
           "branchProtection": {
-            "ok": false,
-            "failures": [
-              {
-                "check": "branchProtection",
-                "message": "No branch protection rule on `main`",
-                "remediation": "In Settings → Branches, add a protection rule for `main` that requires `pipeline/merge-gate`."
-              }
-            ]
+            "ok": true
           }
         }
       },
-      "exitCode": 1,
+      "exitCode": 0,
       "error": null
     }
   ]
