@@ -1,40 +1,504 @@
 {
-  "_comment": "Retainer registry. Each org leebaroneau manages patches for. retainer_status='active' means new pipeline-core releases auto-cascade to that org's consumer repos via push-patches.mjs; 'inactive' means consumers stay frozen at pinned_version.",
+  "_comment": "Canonical Pipeline Fleet registry. This is the source of truth for managed orgs, aliases, repo allowlists, and skips. Per-org .github config/repos.json and config/skip.json should be generated from this file, not hand-edited.",
   "orgs": [
     {
       "name": "leebaroneau",
+      "aliases": [],
       "retainer_status": "self",
       "pinned_version": null,
       "fleet_repo": "leebaroneau/pipeline-fleet",
-      "notes": "Personal org. Managed by this repo's own fleet workflow."
+      "notes": "Personal org. Managed by this repo's own fleet workflow.",
+      "repos": [
+        {
+          "owner": "leebaroneau",
+          "name": "lee-dashboard",
+          "branch": "main",
+          "tier": 1,
+          "notes": "Reference consumer — first repo to adopt Pipeline Core. Phase 0 ground truth."
+        },
+        {
+          "owner": "leebaroneau",
+          "name": "template-agent",
+          "branch": "main",
+          "tier": 1
+        }
+      ],
+      "skip": [
+        {
+          "owner": "leebaroneau",
+          "name": "Birthing-Plan",
+          "reason": "Personal/low-activity repo"
+        },
+        {
+          "owner": "leebaroneau",
+          "name": "boncharge",
+          "reason": "Personal/low-activity repo"
+        },
+        {
+          "owner": "leebaroneau",
+          "name": "Projects",
+          "reason": "Personal learning project"
+        },
+        {
+          "owner": "leebaroneau",
+          "name": "Shopify-Apps",
+          "reason": "Stale"
+        },
+        {
+          "owner": "leebaroneau",
+          "name": "Shopify-liquid-2.0--Vite-Tailwind",
+          "reason": "Stale public sample"
+        },
+        {
+          "owner": "leebaroneau",
+          "name": "hobbyzenlife.com.au",
+          "reason": "Legacy Liquid theme (replaced by HydrogenTS)"
+        },
+        {
+          "owner": "leebaroneau",
+          "name": "hobbyzenlife.com.au-Hydrogen",
+          "reason": "Older Hydrogen version (replaced by HydrogenTS)"
+        },
+        {
+          "owner": "leebaroneau",
+          "name": "notion-github-sync",
+          "reason": "Small utility script, not pipeline-managed"
+        },
+        {
+          "owner": "leebaroneau",
+          "name": "pipeline-core",
+          "reason": "The pipeline itself; manages its own CI"
+        },
+        {
+          "owner": "leebaroneau",
+          "name": "pipeline-fleet",
+          "reason": "This repo; the fleet manager itself"
+        },
+        {
+          "owner": "leebaroneau",
+          "name": "pipeline-core-test",
+          "reason": "Sandbox repo for testing pipeline-core"
+        }
+      ]
     },
     {
       "name": "Haverford-Brands",
+      "aliases": [],
       "retainer_status": "active",
       "pinned_version": null,
       "fleet_repo": "Haverford-Brands/.github",
-      "notes": "Primary commercial org. Receives all patch cascades."
+      "notes": "Primary commercial org. Receives all patch cascades.",
+      "repos": [
+        {
+          "owner": "Haverford-Brands",
+          "name": "Aussiegrazers.com.au",
+          "branch": "main",
+          "tier": 2
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "Catnets.co.nz",
+          "branch": "main",
+          "tier": 2
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "Catnets.co.uk",
+          "branch": "main",
+          "tier": 2
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "Catnets.com.au",
+          "branch": "main",
+          "tier": 2
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "Catnets.sg",
+          "branch": "main",
+          "tier": 2
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "Catnetting.com",
+          "branch": "main",
+          "tier": 2
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "Flux3dp.com.au",
+          "branch": "main",
+          "tier": 2
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "Gohorse.com.au",
+          "branch": "main",
+          "tier": 2
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "Gutzbusta.co.nz",
+          "branch": "main",
+          "tier": 2
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "Gutzbusta.co.uk",
+          "branch": "main",
+          "tier": 2
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "Gutzbusta.com",
+          "branch": "main",
+          "tier": 2
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "Gutzbusta.com.au",
+          "branch": "main",
+          "tier": 2
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "Hardwarebox.co.nz",
+          "branch": "main",
+          "tier": 2
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "Hardwarebox.com.au",
+          "branch": "main",
+          "tier": 2
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "Haverford.co.nz",
+          "branch": "main",
+          "tier": 2
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "Haverford.com.au",
+          "branch": "main",
+          "tier": 2
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "Justprotools.com.au",
+          "branch": "main",
+          "tier": 2
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "Koenigmachinery.com.au",
+          "branch": "main",
+          "tier": 2
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "Marketing-Ops",
+          "branch": "main",
+          "tier": 1
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "Mucheln.co.uk",
+          "branch": "main",
+          "tier": 2
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "Quatranetting.com.au",
+          "branch": "main",
+          "tier": 2
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "Quatrasports.com.au",
+          "branch": "main",
+          "tier": 2
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "Ropecentral.com.au",
+          "branch": "main",
+          "tier": 2
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "Shadematters.com.au",
+          "branch": "main",
+          "tier": 2
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "Template-Repository",
+          "branch": "main",
+          "tier": 2
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "Xtool.koenigmachinery.com.au",
+          "branch": "main",
+          "tier": 2
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "app-Ads-Engine",
+          "branch": "main",
+          "tier": 1
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "app-Gateway",
+          "branch": "main",
+          "tier": 1
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "app-Product-Editor",
+          "branch": "main",
+          "tier": 1
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "app-Shopify-Sales",
+          "branch": "main",
+          "tier": 1
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "app-cope",
+          "branch": "main",
+          "tier": 1
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "bmsaustralia.com.au",
+          "branch": "main",
+          "tier": 2
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "haverford-b2b",
+          "branch": "main",
+          "tier": 2
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "haverford-brands-kurt",
+          "branch": "main",
+          "tier": 1
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "hwb-image-generator",
+          "branch": "main",
+          "tier": 1
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "job-discount-code-scheduler",
+          "branch": "main",
+          "tier": 1
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "price-tool",
+          "branch": "main",
+          "tier": 1
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "quote.koenigmachinery.com.au",
+          "branch": "main",
+          "tier": 1
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "quote.koenigmachinery.com.au-webhooks",
+          "branch": "main",
+          "tier": 1
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "sales.koenigmachinery.com.au",
+          "branch": "main",
+          "tier": 1
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "service-Auth-Gate",
+          "branch": "main",
+          "tier": 1
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "service-Haverford-Dev-API",
+          "branch": "main",
+          "tier": 1
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "service-cin7Klaviyo",
+          "branch": "main",
+          "tier": 1
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "service-cin7shopify-pickupordersync",
+          "branch": "main",
+          "tier": 1
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "service-copeapi",
+          "branch": "main",
+          "tier": 1
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "template-docker",
+          "branch": "main",
+          "tier": 1
+        }
+      ],
+      "skip": [
+        {
+          "owner": "Haverford-Brands",
+          "name": ".github",
+          "reason": "Fleet manager / org-level config; not a managed repo"
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "agent-haverford",
+          "reason": "Active repo, but Pipeline Core is not installed yet; install in a separate PR before adding to managed repos"
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "agent-haverford-state",
+          "reason": "State/data repo; not a code repo for Pipeline Core management"
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "newsletter-qa",
+          "reason": "Active utility repo, but Pipeline Core is not installed yet; install in a separate PR before adding to managed repos"
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "Koenigmachinery.com.au-Wordpress",
+          "reason": "Legacy WordPress repo; intentionally not pipeline-managed"
+        },
+        {
+          "owner": "Haverford-Brands",
+          "name": "Shopify-Apps",
+          "reason": "Legacy/stale repo; intentionally not pipeline-managed"
+        }
+      ]
     },
     {
-      "name": "ALX-Finance",
+      "name": "alx-finance",
+      "aliases": [
+        "ALX-Finance"
+      ],
       "retainer_status": "active",
       "pinned_version": null,
-      "fleet_repo": "ALX-Finance/.github",
-      "notes": ""
+      "fleet_repo": "alx-finance/.github",
+      "notes": "Canonical GitHub owner is lowercase; ALX-Finance remains as a historical alias.",
+      "repos": [
+        {
+          "owner": "alx-finance",
+          "name": "paperclip-hermes-gbrain",
+          "branch": "main",
+          "tier": 1
+        },
+        {
+          "owner": "alx-finance",
+          "name": "website",
+          "branch": "main",
+          "tier": 1
+        }
+      ],
+      "skip": [
+        {
+          "owner": "alx-finance",
+          "name": ".github",
+          "reason": "Fleet manager / org-level config; not a managed repo"
+        },
+        {
+          "owner": "alx-finance",
+          "name": "agent-alx",
+          "reason": "Active repo, but Pipeline Core is not installed yet; install in a separate PR before adding to managed repos"
+        }
+      ]
     },
     {
-      "name": "Genvest-Property",
+      "name": "genvest",
+      "aliases": [
+        "Genvest-Property"
+      ],
       "retainer_status": "active",
       "pinned_version": null,
-      "fleet_repo": "Genvest-Property/.github",
-      "notes": ""
+      "fleet_repo": "genvest/.github",
+      "notes": "Canonical GitHub owner is genvest; Genvest-Property remains as a historical alias.",
+      "repos": [
+        {
+          "owner": "genvest",
+          "name": "gateway-genvest",
+          "branch": "main",
+          "tier": 1,
+          "notes": "Pipeline Core installed; missing from previous fleet config"
+        },
+        {
+          "owner": "genvest",
+          "name": "website",
+          "branch": "main",
+          "tier": 1
+        }
+      ],
+      "skip": [
+        {
+          "owner": "genvest",
+          "name": ".github",
+          "reason": "Fleet manager / org-level config; not a managed repo"
+        },
+        {
+          "owner": "genvest",
+          "name": "agent-genvest",
+          "reason": "State/log archive style repo; Pipeline Core is not installed"
+        },
+        {
+          "owner": "genvest",
+          "name": "service-api",
+          "reason": "Archived repo; removed from active Pipeline Core management"
+        }
+      ]
     },
     {
       "name": "kwa-nguyen",
+      "aliases": [],
       "retainer_status": "active",
       "pinned_version": null,
       "fleet_repo": "kwa-nguyen/.github",
-      "notes": ""
+      "notes": "",
+      "repos": [
+        {
+          "owner": "kwa-nguyen",
+          "name": "agent-kwa",
+          "branch": "main",
+          "tier": 1
+        }
+      ],
+      "skip": [
+        {
+          "owner": "kwa-nguyen",
+          "name": ".github",
+          "reason": "Fleet manager / org-level config; not a managed repo"
+        }
+      ]
     }
   ]
 }
