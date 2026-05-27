@@ -72,13 +72,30 @@
       "reason": "Sandbox repo for testing pipeline-core"
     }
   ],
-  "candidates": [],
+  "candidates": [
+    {
+      "owner": "leebaroneau",
+      "name": "template-crm",
+      "visibility": "public",
+      "primaryLanguage": null,
+      "updatedAt": "2026-05-27T04:47:27Z",
+      "description": "Twenty CRM Docker Compose template for Coolify"
+    },
+    {
+      "owner": "leebaroneau",
+      "name": "website",
+      "visibility": "public",
+      "primaryLanguage": "JavaScript",
+      "updatedAt": "2026-05-27T00:32:47Z",
+      "description": "Lee Barone — CV and portfolio site"
+    }
+  ],
   "counts": {
     "managed": 2,
     "skipped": 11,
-    "candidates": 0,
+    "candidates": 2,
     "archived": 0,
     "forks": 3
   },
-  "generatedAt": "2026-05-25T12:21:36.054Z"
+  "generatedAt": "2026-05-27T12:18:03.643Z"
 }
