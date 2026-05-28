@@ -77,8 +77,8 @@
       "owner": "leebaroneau",
       "name": "template-crm",
       "visibility": "public",
-      "primaryLanguage": null,
-      "updatedAt": "2026-05-27T04:47:27Z",
+      "primaryLanguage": "JavaScript",
+      "updatedAt": "2026-05-27T23:23:23Z",
       "description": "Twenty CRM Docker Compose template for Coolify"
     },
     {
@@ -97,5 +97,5 @@
     "archived": 0,
     "forks": 3
   },
-  "generatedAt": "2026-05-27T12:18:03.643Z"
+  "generatedAt": "2026-05-28T12:20:49.089Z"
 }
