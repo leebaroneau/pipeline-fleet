@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-05-24T22:43:13.318Z",
-  "startedAt": "2026-05-24T22:43:09.142Z",
+  "generatedAt": "2026-05-29T12:09:51.429Z",
+  "startedAt": "2026-05-29T12:09:48.881Z",
   "totals": {
     "managed": 2,
-    "ok": 2,
-    "failing": 0,
+    "ok": 1,
+    "failing": 1,
     "warningsOnly": 1
   },
   "results": [
@@ -190,8 +190,14 @@
       "branch": "main",
       "tier": 1,
       "result": {
-        "ok": true,
-        "failures": [],
+        "ok": false,
+        "failures": [
+          {
+            "check": "branchProtection",
+            "message": "Branch `main` does not require `pipeline/merge-gate` (found: no required checks)",
+            "remediation": "In Settings → Branches, edit the rule for `main` and add `pipeline/merge-gate` to \"Require status checks to pass before merging\"."
+          }
+        ],
         "warnings": [],
         "checks": {
           "config": {
@@ -300,11 +306,18 @@
             "warnings": []
           },
           "branchProtection": {
-            "ok": true
+            "ok": false,
+            "failures": [
+              {
+                "check": "branchProtection",
+                "message": "Branch `main` does not require `pipeline/merge-gate` (found: no required checks)",
+                "remediation": "In Settings → Branches, edit the rule for `main` and add `pipeline/merge-gate` to \"Require status checks to pass before merging\"."
+              }
+            ]
           }
         }
       },
-      "exitCode": 0,
+      "exitCode": 1,
       "error": null
     }
   ]

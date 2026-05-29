@@ -7,17 +7,17 @@ This repo is one of N independent org fleets — Haverford-Brands, alx-finance, 
 ## Status (leebaroneau repos only)
 
 <!-- pipeline-fleet:tracker-start -->
-**2** repos under management · **2** OK · **0** failing · **1** with warnings
+**2** repos under management · **1** OK · **1** failing · **1** with warnings
 
-_Updated 2026-05-24T22:43:13.318Z._
+_Updated 2026-05-29T12:09:51.429Z._
 
 | Repo | Status | Failures | Warnings |
 | --- | --- | ---: | ---: |
+| [`leebaroneau/template-agent`](https://github.com/leebaroneau/template-agent) | ❌ fail | 1 | 0 |
 | [`leebaroneau/lee-dashboard`](https://github.com/leebaroneau/lee-dashboard) | ⚠️ warn | 0 | 1 |
-| [`leebaroneau/template-agent`](https://github.com/leebaroneau/template-agent) | ✅ ok | 0 | 0 |
 <!-- pipeline-fleet:tracker-end -->
 
-_Updated by: `scripts/update-tracker.mjs`. Last updated: 2026-05-24T22:43:13.318Z._
+_Updated by: `scripts/update-tracker.mjs`. Last updated: 2026-05-29T12:09:51.429Z._
 
 ## Retainer registry
 
