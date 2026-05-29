@@ -95,15 +95,9 @@ gh workflow run "Fleet — doctor + discover" --repo leebaroneau/pipeline-fleet 
 
 ### Self-hosted GitHub Actions runner pool
 
-Retainers whose hosted-runner minute budget is exhausted can deploy a self-hosted Actions runner pool on their own Coolify, so CI compute lands locally while orchestration stays on GitHub. The daily fleet sweep then rides through this pool as a free job (self-hosted runner minutes don't count against the org's GH Actions quota).
+The runner pool now lives in **[`pipeline-core/deploy/pipeline-runner-pool/`](https://github.com/leebaroneau/pipeline-core/tree/main/deploy/pipeline-runner-pool)** (registration via the org-owned `pipeline-bot` GitHub App, not a personal PAT). Retainers whose hosted-runner minute budget is exhausted deploy it from there via Coolify, so CI compute lands locally while orchestration stays on GitHub; the daily fleet sweep then rides through the pool as a free job (self-hosted minutes don't count against the org's GH Actions quota).
 
-Files:
-
-- [`runner.Dockerfile`](runner.Dockerfile) — extends `myoung34/github-runner:latest` with the Docker CLI (no daemon).
-- [`docker-compose.actions-runner.yml`](docker-compose.actions-runner.yml) — 2-slot ephemeral pool.
-- [`.env.actions-runner.example`](.env.actions-runner.example) — runtime env shape (`ACCESS_TOKEN`, `RUNNER_OWNER`, `RUNNER_LABELS`).
-
-For setup, verification, scaling, rotation, and decommission, read [docs/self-hosted-runner-pool.md](docs/self-hosted-runner-pool.md).
+See that folder's `README.md` for the Coolify settings (Base Directory + Watch Paths) and the verify/scale/rotate/decommission runbook.
 
 ## Auth
 
